@@ -5,6 +5,7 @@ interface PgPaymentData {
     order_name: string;
     amount: number;
     currency?: string;
+    pay_method?: string;
     customer_name?: string;
     customer_email?: string;
     customer_phone?: string;
@@ -81,31 +82,19 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
         const config: ClientConfig = configJson.data;
         const callbackUrl = window.location.origin + config.callback_urls.callback;
 
-        // 2. m_Completepayment 반드시 payplus.js 로드 전에 선언
-        window.m_Completepayment = function (form: HTMLFormElement) {
-            // KCP가 결제 완료 후 이 함수를 호출합니다.
-            // form 데이터(enc_data, enc_info, tno 등)를 서버로 POST합니다.
-            form.action = callbackUrl;
-            form.method = 'POST';
-            document.body.appendChild(form);
-            form.submit();
+        // 2. KCP SDK를 iframe 동기 파싱으로 로드 후 iframe 내에서 결제창 호출
+        //    - iframe document.open/write/close: 파싱 중 script 삽입 → document.write 정상 동작
+        //    - m_Completepayment: iframe window에 등록, 결제 완료 후 콜백 URL POST
+        //    - 결제 후 top window를 완료 페이지로 이동 (parent.location)
+        // KCP pay_method 비트마스크 변환 (payplus_web.jsp 규격)
+        // card=100000000000, bank=010000000000, vbank=001000000000, phone=000100000000
+        const KCP_PAY_METHOD: Record<string, string> = {
+            card:  '100000000000',
+            bank:  '010000000000',
+            vbank: '001000000000',
+            phone: '000100000000',
         };
-
-        // 3. KCP payplus.js 동적 로드
-        await loadScript(config.sdk_url);
-
-        if (typeof window.KCP_Pay_Execute !== 'function') {
-            await new Promise<void>((resolve) => setTimeout(resolve, 200));
-        }
-
-        if (typeof window.KCP_Pay_Execute !== 'function') {
-            console.error('[sirsoft-pay-nhnkcp] KCP_Pay_Execute not available after loading SDK');
-            return;
-        }
-
-        // 4. 결제 폼 생성
-        const form = document.createElement('form');
-        form.name = 'order_info';
+        const payMethod = KCP_PAY_METHOD[pgPaymentData.pay_method ?? 'card'] ?? '100000000000';
 
         const fields: Record<string, string> = {
             site_cd: config.client_id,
@@ -115,22 +104,68 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
             buyr_name: pgPaymentData.customer_name ?? '',
             buyr_mail: pgPaymentData.customer_email ?? '',
             buyr_tel1: pgPaymentData.customer_phone ?? '',
-            pay_method: 'CARD',
+            pay_method: payMethod,
             Ret_URL: callbackUrl,
         };
 
-        for (const [name, value] of Object.entries(fields)) {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = name;
-            input.value = value;
-            form.appendChild(input);
-        }
+        const hiddenInputs = Object.entries(fields)
+            .map(([n, v]) => `<input type="hidden" name="${n}" value="${v.replace(/"/g, '&quot;')}">`)
+            .join('');
 
-        document.body.appendChild(form);
+        await new Promise<void>((resolve, reject) => {
+            const existingIframe = document.getElementById('kcp-sdk-iframe') as HTMLIFrameElement | null;
+            if (existingIframe) existingIframe.remove();
 
-        // 5. KCP 결제창 호출
-        window.KCP_Pay_Execute(form);
+            // KCP 결제창은 iframe 내부에 오버레이로 렌더링되므로
+            // iframe을 전체화면 fixed 오버레이로 표시해야 사용자가 볼 수 있음
+            const iframe = document.createElement('iframe');
+            iframe.id = 'kcp-sdk-iframe';
+            iframe.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;border:0;z-index:99999;background:#fff;';
+            document.body.appendChild(iframe);
+
+            const iframeWin = iframe.contentWindow as any;
+
+            // iframe 내 결제 완료 콜백 → top window POST 이동
+            iframeWin.m_Completepayment = function (form: HTMLFormElement) {
+                form.action = callbackUrl;
+                form.method = 'POST';
+                form.target = '_top';
+                iframeWin.document.body.appendChild(form);
+                form.submit();
+            };
+
+            iframeWin.__kcpDone = resolve;
+            iframeWin.__kcpFail = (err: Error) => {
+                iframe.remove();
+                reject(err);
+            };
+
+            const iframeDoc = (iframe.contentDocument || iframeWin.document) as Document;
+            iframeDoc.open();
+            iframeDoc.write(`<!DOCTYPE html><html><head>
+<script src="${config.sdk_url}"><\/script>
+</head><body style="margin:0;padding:0;">
+<form name="order_info">${hiddenInputs}</form>
+<script>
+try {
+  if (typeof KCP_Pay_Execute === 'function') {
+    KCP_Pay_Execute(document.forms['order_info']);
+    window.__kcpDone && window.__kcpDone();
+  } else {
+    window.__kcpFail && window.__kcpFail(new Error('KCP_Pay_Execute not defined'));
+  }
+} catch(e) {
+  window.__kcpFail && window.__kcpFail(e);
+}
+<\/script>
+</body></html>`);
+            iframeDoc.close();
+
+            setTimeout(() => {
+                iframe.remove();
+                reject(new Error('KCP SDK load timeout'));
+            }, 15000);
+        });
 
     } catch (error: unknown) {
         console.error('[sirsoft-pay-nhnkcp] requestPayment error', error);
