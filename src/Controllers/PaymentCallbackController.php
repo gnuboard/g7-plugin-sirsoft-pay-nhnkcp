@@ -19,8 +19,8 @@ use Plugins\Sirsoft\Pay\Nhnkcp\Services\NhnKcpApiService;
  * KCP 결제 콜백 컨트롤러
  *
  * KCP Standard Pay는 브라우저 POST 콜백 방식입니다:
- *   1단계: 브라우저가 POST 콜백으로 enc_data, enc_info, tno 등 전달 → authCallback()
- *   2단계: 서버가 KCP REST API로 거래 조회하여 최종 확인 → NhnKcpApiService::getTransaction()
+ *   1단계: 브라우저가 POST 콜백으로 enc_data, enc_info 등 전달 → authCallback()
+ *   2단계: 서버가 KCP CLI 바이너리로 최종 승인 확인 → NhnKcpApiService::approvePayment()
  */
 class PaymentCallbackController
 {
@@ -46,11 +46,13 @@ class PaymentCallbackController
 
         $resCd = $validated['res_cd'];
         $resMsg = $validated['res_msg'] ?? '';
-        $tno = $validated['tno'];
+        $encData = $validated['enc_data'];
+        $encInfo = $validated['enc_info'];
         $ordrIdxx = $validated['ordr_idxx'];
         $goodMny = (int) $validated['good_mny'];
+        $custIp = $request->ip() ?? '127.0.0.1';
 
-        // 1단계: KCP 결과 코드 확인
+        // 1단계: KCP 브라우저 결과 코드 확인
         if ($resCd !== self::SUCCESS_RES_CD) {
             Log::warning('KCP: payment result failed', [
                 'ordr_idxx' => $ordrIdxx,
@@ -77,15 +79,15 @@ class PaymentCallbackController
 
             HookManager::doAction('sirsoft-pay-nhnkcp.payment.before_confirm', $order, $validated);
 
-            // 3단계: KCP REST API로 거래 조회 (최종 확인)
-            $pgResponse = $this->apiService->getTransaction($tno, $ordrIdxx);
+            // 3단계: KCP CLI로 최종 승인 확인
+            $pgResponse = $this->apiService->approvePayment($encData, $encInfo, $ordrIdxx, $custIp);
 
             HookManager::doAction('sirsoft-pay-nhnkcp.payment.after_confirm', $order, $pgResponse);
 
             $pgResCd = $pgResponse['res_cd'] ?? '';
 
             if ($pgResCd !== self::SUCCESS_RES_CD) {
-                Log::warning('KCP: transaction confirm failed', [
+                Log::warning('KCP: CLI approval failed', [
                     'ordr_idxx' => $ordrIdxx,
                     'res_cd' => $pgResCd,
                     'res_msg' => $pgResponse['res_msg'] ?? '',
@@ -100,6 +102,8 @@ class PaymentCallbackController
                 ]));
             }
 
+            $tno = $pgResponse['tno'] ?? ($validated['tno'] ?? '');
+
             // 4단계: 주문 완료 처리
             $this->orderService->completePayment($order, [
                 'transaction_id' => $tno,
@@ -112,7 +116,7 @@ class PaymentCallbackController
                 'receipt_url' => null,
                 'payment_meta' => [
                     'res_cd' => $pgResCd,
-                    'use_pay_method' => $validated['use_pay_method'] ?? null,
+                    'use_pay_method' => $validated['use_pay_method'] ?? $pgResponse['use_pay_method'] ?? null,
                     'app_time' => $pgResponse['app_time'] ?? null,
                     'account' => $pgResponse['account'] ?? null,
                     'bank_name' => $pgResponse['bank_name'] ?? null,

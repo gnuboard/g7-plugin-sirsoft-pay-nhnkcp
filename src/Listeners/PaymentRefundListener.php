@@ -55,8 +55,9 @@ class PaymentRefundListener implements HookListenerInterface
             $cancelAmt = (int) $refundAmount;
             $ordrIdxx = (string) $order->order_number;
 
-            $isPartial = $cancelAmt < (int) $payment->amount;
-            $response = $apiService->cancelPayment($tno, $ordrIdxx, $cancelAmt, $cancelMsg, $isPartial);
+            $totalAmt = (int) $payment->amount;
+            $isPartial = $cancelAmt < $totalAmt;
+            $response = $apiService->cancelPayment($tno, $ordrIdxx, $cancelAmt, $cancelMsg, $isPartial, $totalAmt);
 
             Log::info('KCP: refund success', [
                 'order_id' => $order->id,
