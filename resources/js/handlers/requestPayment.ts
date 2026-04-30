@@ -23,42 +23,37 @@ interface ClientConfig {
     };
 }
 
-declare global {
-    interface Window {
-        m_Completepayment: (form: HTMLFormElement) => void;
-        KCP_Pay_Execute: (form: HTMLFormElement) => void;
+// 사용자가 결제창을 직접 닫은 경우 - 에러 모달 없이 조용히 처리
+class KcpCancelledError extends Error {
+    constructor(msg?: string) {
+        super(msg ?? '결제가 취소되었습니다.');
+        this.name = 'KcpCancelledError';
     }
 }
 
-function loadScript(src: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-        if (document.querySelector(`script[src="${src}"]`)) {
-            resolve();
-            return;
-        }
-
-        const script = document.createElement('script');
-        script.src = src;
-        script.async = false; // KCP SDK must load synchronously to register globals
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
-        document.head.appendChild(script);
-    });
-}
+// KCP pay_method 비트마스크 변환 (payplus_web.jsp 규격)
+const KCP_PAY_METHOD: Record<string, string> = {
+    card:  '100000000000',
+    bank:  '010000000000',
+    vbank: '001000000000',
+    phone: '000100000000',
+};
 
 /**
  * NHN KCP 결제창 호출 핸들러
  *
- * 체크아웃 레이아웃에서 주문 생성 API 성공 후 호출됩니다:
- *   handler: "sirsoft-pay-nhnkcp.requestPayment"
- *   params: { pgPaymentData: response.data.pg_payment_data }
+ * Chrome은 비동기로 로드된 외부 스크립트에서 document.write()를 차단합니다.
+ * KCP payplus_web.jsp는 내부적으로 document.write()를 사용하므로,
+ * iframe 내에서 동기 파싱 방식(document.open/write/close)으로 SDK를 로드합니다.
  *
- * 호출 순서:
- *   1. Client Config API 호출 → site_cd, sdk_url 획득
- *   2. window.m_Completepayment 정의 (payplus.js 로드 전 반드시 선언)
- *   3. KCP payplus.js 동적 로드
- *   4. 결제 폼 생성 후 KCP_Pay_Execute() 호출 → 결제창 오픈
- *   5. 결제 완료 시 KCP가 Ret_URL(POST)로 결과 전달
+ * 흐름:
+ *   1. Client Config API → site_cd, sdk_url 획득
+ *   2. 메인 창에 반투명 dim 오버레이 추가
+ *   3. 투명 iframe 생성 → document.open/write/close로 SDK 동기 로드
+ *   4. iframe 내 KCP_Pay_Execute() 호출 → 결제창 오픈
+ *   5. m_Completepayment 콜백에서 res_cd 확인
+ *      - 성공(0000): Ret_URL로 POST → 완료 페이지 이동
+ *      - 취소/오류: iframe+overlay 제거, 결제 상태 복원
  */
 export async function requestPaymentHandler(action: any, _context?: any): Promise<void> {
     const { pgPaymentData } = (action.params || {}) as RequestPaymentParams;
@@ -81,19 +76,6 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
 
         const config: ClientConfig = configJson.data;
         const callbackUrl = window.location.origin + config.callback_urls.callback;
-
-        // 2. KCP SDK를 iframe 동기 파싱으로 로드 후 iframe 내에서 결제창 호출
-        //    - iframe document.open/write/close: 파싱 중 script 삽입 → document.write 정상 동작
-        //    - m_Completepayment: iframe window에 등록, 결제 완료 후 콜백 URL POST
-        //    - 결제 후 top window를 완료 페이지로 이동 (parent.location)
-        // KCP pay_method 비트마스크 변환 (payplus_web.jsp 규격)
-        // card=100000000000, bank=010000000000, vbank=001000000000, phone=000100000000
-        const KCP_PAY_METHOD: Record<string, string> = {
-            card:  '100000000000',
-            bank:  '010000000000',
-            vbank: '001000000000',
-            phone: '000100000000',
-        };
         const payMethod = KCP_PAY_METHOD[pgPaymentData.pay_method ?? 'card'] ?? '100000000000';
 
         const fields: Record<string, string> = {
@@ -113,38 +95,62 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
             .join('');
 
         await new Promise<void>((resolve, reject) => {
-            const existingIframe = document.getElementById('kcp-sdk-iframe') as HTMLIFrameElement | null;
-            if (existingIframe) existingIframe.remove();
+            // 기존 요소 정리
+            document.getElementById('kcp-sdk-iframe')?.remove();
+            document.getElementById('kcp-dim-overlay')?.remove();
 
-            // KCP 결제창은 iframe 내부에 오버레이로 렌더링되므로
-            // iframe을 전체화면 fixed 오버레이로 표시해야 사용자가 볼 수 있음
+            // 2. 메인 창에 반투명 dim 오버레이 (결제창 뒤 배경)
+            const overlay = document.createElement('div');
+            overlay.id = 'kcp-dim-overlay';
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:99998;';
+            document.body.appendChild(overlay);
+
+            // 3. 투명 iframe - KCP 결제창이 내부에 렌더링됨
             const iframe = document.createElement('iframe');
             iframe.id = 'kcp-sdk-iframe';
-            iframe.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;border:0;z-index:99999;background:#fff;';
+            iframe.setAttribute('allowtransparency', 'true');
+            iframe.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;border:0;z-index:99999;background:transparent;';
             document.body.appendChild(iframe);
 
             const iframeWin = iframe.contentWindow as any;
 
-            // iframe 내 결제 완료 콜백 → top window POST 이동
+            const cleanup = () => {
+                iframe.remove();
+                overlay.remove();
+            };
+
+            // 5. 결제 완료 콜백 - KCP가 결제 후 호출
             iframeWin.m_Completepayment = function (form: HTMLFormElement) {
-                form.action = callbackUrl;
-                form.method = 'POST';
-                form.target = '_top';
-                iframeWin.document.body.appendChild(form);
-                form.submit();
+                const resCode = (form.elements as any)['res_cd']?.value ?? '';
+                const resMsg  = (form.elements as any)['res_msg']?.value ?? '';
+
+                if (resCode === '0000') {
+                    // 결제 성공 → Ret_URL로 POST 제출 (top window 이동)
+                    form.action = callbackUrl;
+                    form.method = 'POST';
+                    form.target = '_top';
+                    iframeWin.document.body.appendChild(form);
+                    form.submit();
+                } else {
+                    // 취소 또는 오류
+                    cleanup();
+                    const isCancelled = resCode === '' || resCode === '7777' || resMsg.includes('취소');
+                    reject(isCancelled ? new KcpCancelledError(resMsg) : new Error(`KCP 오류 [${resCode}]: ${resMsg}`));
+                }
             };
 
             iframeWin.__kcpDone = resolve;
             iframeWin.__kcpFail = (err: Error) => {
-                iframe.remove();
+                cleanup();
                 reject(err);
             };
 
+            // 4. SDK 동기 로드 + KCP_Pay_Execute 호출
             const iframeDoc = (iframe.contentDocument || iframeWin.document) as Document;
             iframeDoc.open();
             iframeDoc.write(`<!DOCTYPE html><html><head>
 <script src="${config.sdk_url}"><\/script>
-</head><body style="margin:0;padding:0;">
+</head><body style="margin:0;padding:0;background:transparent;">
 <form name="order_info">${hiddenInputs}</form>
 <script>
 try {
@@ -161,15 +167,21 @@ try {
 </body></html>`);
             iframeDoc.close();
 
+            // SDK 로드 타임아웃
             setTimeout(() => {
-                iframe.remove();
+                cleanup();
                 reject(new Error('KCP SDK load timeout'));
             }, 15000);
         });
 
     } catch (error: unknown) {
-        console.error('[sirsoft-pay-nhnkcp] requestPayment error', error);
+        if (error instanceof KcpCancelledError) {
+            // 사용자가 결제 취소 → 에러 모달 없이 조용히 상태 복원
+            G7Core?.state?.setLocal?.({ isSubmittingOrder: false });
+            return;
+        }
 
+        console.error('[sirsoft-pay-nhnkcp] requestPayment error', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         G7Core?.state?.setLocal?.({ paymentErrorMessage: errorMessage, isSubmittingOrder: false });
         G7Core?.modal?.open?.('nhnkcp_payment_error_modal');
