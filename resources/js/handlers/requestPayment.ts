@@ -139,7 +139,8 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
                 }
             };
 
-            iframeWin.__kcpDone = resolve;
+            // __kcpDone은 사용하지 않음 — Promise는 m_Completepayment 또는 timeout까지 pending 유지
+            // (resolve를 즉시 호출하면 이후 cancel 시 reject가 무시됨)
             iframeWin.__kcpFail = (err: Error) => {
                 cleanup();
                 reject(err);
@@ -156,7 +157,6 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
 try {
   if (typeof KCP_Pay_Execute === 'function') {
     KCP_Pay_Execute(document.forms['order_info']);
-    window.__kcpDone && window.__kcpDone();
   } else {
     window.__kcpFail && window.__kcpFail(new Error('KCP_Pay_Execute not defined'));
   }
