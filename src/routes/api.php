@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Plugins\Sirsoft\Pay\Nhnkcp\Controllers\AdminTransactionController;
+use Plugins\Sirsoft\Pay\Nhnkcp\Controllers\UserReceiptController;
 
 /*
 |--------------------------------------------------------------------------
@@ -12,7 +14,13 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::prefix('admin')->middleware(['auth:sanctum', 'admin'])->group(function () {
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::get('/user/orders/{orderNumber}/receipt', [UserReceiptController::class, 'show'])
+        ->name('user.orders.receipt');
+});
+
+Route::prefix('admin')->name('admin.')->middleware(['auth:sanctum', 'admin'])->group(function () {
+    // 가상계좌 입금통보 URL 조회 (관리자 설정 페이지 표시용)
     Route::get('/vbank-notify-url', function () {
         return response()->json([
             'success' => true,
@@ -21,4 +29,8 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'admin'])->group(function ()
             ],
         ]);
     })->name('vbank.notify.url');
+
+    // 주문번호로 거래 정보 조회 (레이아웃 확장 자동 로드용)
+    Route::get('/orders/{orderNumber}/transaction-status', [AdminTransactionController::class, 'queryByOrder'])
+        ->name('orders.transaction-status');
 });

@@ -1,4 +1,5 @@
 import { handlerMap } from './handlers';
+import { installOrderResponseInterceptor } from './orderResponseInterceptor';
 
 const PLUGIN_IDENTIFIER = 'sirsoft-pay-nhnkcp';
 
@@ -75,6 +76,7 @@ function initPlugin(): void {
     }
 }
 
+installOrderResponseInterceptor();
 initPlugin();
 
 (window as Record<string, unknown>).__SirsoftNhnkcp = {

@@ -11,6 +11,30 @@
             "confirm_failed": "KCP transaction inquiry failed."
         }
     },
+    "payment_error": {
+        "title": "Payment Error",
+        "message": "An error occurred while processing the payment."
+    },
+    "user": {
+        "test_mode_badge": "Test Payment",
+        "payment_type_label": "Payment Method",
+        "receipt_label": "Receipt",
+        "receipt_view": "View Receipt"
+    },
+    "admin": {
+        "test_mode_badge": "Test Payment",
+        "test_mode_order_notice": "This order was processed as a test payment.",
+        "order_info_title": "NHN KCP Payment Info",
+        "order_info_description": "Displays stored KCP payment information.",
+        "pay_status_approved": "Approved",
+        "pay_status_cancelled": "Cancelled",
+        "pay_status_unknown": "Unknown",
+        "result_tno": "Transaction No. (TNO)",
+        "result_app_no": "Approval No.",
+        "result_app_time": "Approval Time",
+        "result_pay_method": "Pay Method",
+        "result_res_cd": "Result Code"
+    },
     "settings": {
         "title": "NHN KCP Settings",
         "description": "Manage NHN KCP payment plugin settings.",

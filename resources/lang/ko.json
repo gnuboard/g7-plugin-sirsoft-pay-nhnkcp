@@ -11,6 +11,30 @@
             "confirm_failed": "KCP 거래 조회에 실패했습니다."
         }
     },
+    "payment_error": {
+        "title": "결제 오류",
+        "message": "결제 처리 중 오류가 발생했습니다."
+    },
+    "user": {
+        "test_mode_badge": "테스트 결제",
+        "payment_type_label": "결제 수단",
+        "receipt_label": "영수증",
+        "receipt_view": "영수증 조회"
+    },
+    "admin": {
+        "test_mode_badge": "테스트 결제",
+        "test_mode_order_notice": "이 주문은 테스트 결제로 처리되었습니다.",
+        "order_info_title": "NHN KCP 결제 정보",
+        "order_info_description": "DB에 저장된 KCP 결제 정보를 표시합니다.",
+        "pay_status_approved": "승인",
+        "pay_status_cancelled": "취소",
+        "pay_status_unknown": "미확인",
+        "result_tno": "거래번호 (TNO)",
+        "result_app_no": "승인번호",
+        "result_app_time": "승인일시",
+        "result_pay_method": "결제수단",
+        "result_res_cd": "응답코드"
+    },
     "settings": {
         "title": "NHN KCP 설정",
         "description": "NHN KCP 결제 플러그인 설정을 관리합니다.",
