@@ -112,8 +112,9 @@ async function injectOnMypageOrder(orderNumber: string): Promise<void> {
 
     // 결제수단, 카드명 등 label+value 행이 있는 dl/dd/p 영역 찾기
     // "결제" 텍스트가 포함된 행들을 탐색해서 마지막 행 다음에 주입
+    const PAYMENT_LABEL_TEXTS = new Set(['결제수단', '결제방법', '결제 방법', '카드번호', '결제수단/카드정보']);
     const paymentLabels = Array.from(document.querySelectorAll('span, dt, td, p'))
-        .filter(el => el.textContent?.trim() === '결제수단' || el.textContent?.trim() === '결제방법' || el.textContent?.trim() === '카드번호');
+        .filter(el => PAYMENT_LABEL_TEXTS.has(el.textContent?.trim() ?? ''));
 
     let insertAfter: Element | null = null;
     if (paymentLabels.length > 0) {
