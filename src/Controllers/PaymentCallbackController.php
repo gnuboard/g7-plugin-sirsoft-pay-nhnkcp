@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Modules\Sirsoft\Ecommerce\Exceptions\PaymentAmountMismatchException;
+use Modules\Sirsoft\Ecommerce\Models\Order;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
 use Plugins\Sirsoft\Pay\Nhnkcp\Http\Requests\AuthCallbackRequest;
 use Plugins\Sirsoft\Pay\Nhnkcp\Http\Requests\VbankNotifyRequest;
@@ -49,8 +50,17 @@ class PaymentCallbackController
         $encData = $validated['enc_data'];
         $encInfo = $validated['enc_info'];
         $ordrIdxx = $validated['ordr_idxx'];
-        $goodMny = (int) $validated['good_mny'];
+        $goodMny = isset($validated['good_mny']) ? (int) $validated['good_mny'] : 0;
         $custIp = $request->ip() ?? '127.0.0.1';
+
+        Log::info('KCP: authCallback received', [
+            'ordr_idxx' => $ordrIdxx,
+            'res_cd' => $resCd,
+            'good_mny' => $goodMny,
+            'has_enc_data' => !empty($encData),
+            'has_enc_info' => !empty($encInfo),
+            'post_keys' => array_keys($request->all()),
+        ]);
 
         // 1단계: KCP 브라우저 결과 코드 확인
         if ($resCd !== self::SUCCESS_RES_CD) {
@@ -75,6 +85,11 @@ class PaymentCallbackController
                 Log::error('KCP: order not found', ['ordr_idxx' => $ordrIdxx]);
 
                 return redirect($this->resolveFailUrl(['error' => 'order_not_found', 'orderId' => $ordrIdxx]));
+            }
+
+            // 가상계좌: 계좌 발급 완료 처리 (실제 입금은 vbankNotify에서 처리)
+            if (($validated['use_pay_method'] ?? '') === 'VCNT') {
+                return $this->handleVbankIssued($validated, $order, $encData, $encInfo, $ordrIdxx, $custIp);
             }
 
             HookManager::doAction('sirsoft-pay-nhnkcp.payment.before_confirm', $order, $validated);
@@ -104,6 +119,11 @@ class PaymentCallbackController
 
             $tno = $pgResponse['tno'] ?? ($validated['tno'] ?? '');
 
+            // KCP는 CLI 응답에 good_mny가 없는 경우가 많으므로 주문 금액으로 검증
+            $approvedAmt = $goodMny > 0
+                ? $goodMny
+                : (int) round((float) $order->total_amount, 2);
+
             // 4단계: 주문 완료 처리
             $this->orderService->completePayment($order, [
                 'transaction_id' => $tno,
@@ -124,7 +144,7 @@ class PaymentCallbackController
                     'pg_raw_response' => $pgResponse,
                 ],
                 'payment_device' => $this->detectDevice($request),
-            ], $goodMny);
+            ], $approvedAmt);
 
             return redirect($this->resolveSuccessUrl($ordrIdxx));
 
@@ -205,6 +225,77 @@ class PaymentCallbackController
             ]);
 
             return response('FAIL', 200)->header('Content-Type', 'text/plain');
+        }
+    }
+
+    /**
+     * 가상계좌 발급 처리
+     *
+     * authCallback에서 use_pay_method=VCNT일 때 호출됩니다.
+     * CLI로 계좌 정보를 확인한 뒤 order_meta에 저장하고 성공 페이지로 이동합니다.
+     * 실제 결제 완료(completePayment)는 입금 통보(vbankNotify) 시점에 처리됩니다.
+     */
+    private function handleVbankIssued(
+        array $validated,
+        Order $order,
+        string $encData,
+        string $encInfo,
+        string $ordrIdxx,
+        string $custIp,
+    ): \Illuminate\Http\RedirectResponse {
+        try {
+            $pgResponse = $this->apiService->approvePayment($encData, $encInfo, $ordrIdxx, $custIp);
+            $pgResCd = $pgResponse['res_cd'] ?? '';
+
+            if ($pgResCd !== self::SUCCESS_RES_CD) {
+                Log::warning('KCP: vbank account issuance failed', [
+                    'ordr_idxx' => $ordrIdxx,
+                    'res_cd' => $pgResCd,
+                    'res_msg' => $pgResponse['res_msg'] ?? '',
+                ]);
+
+                return redirect($this->resolveFailUrl([
+                    'error' => $pgResCd,
+                    'message' => $pgResponse['res_msg'] ?? '',
+                    'orderId' => $ordrIdxx,
+                ]));
+            }
+
+            $tno = $pgResponse['tno'] ?? ($validated['tno'] ?? '');
+
+            // 가상계좌 발급 정보를 order_meta에 저장 (주문은 PENDING_PAYMENT 상태 유지)
+            $existingMeta = $order->order_meta ?? [];
+            $order->update([
+                'order_meta' => array_merge($existingMeta, [
+                    'vbank_tno' => $tno,
+                    'vbank_account' => $pgResponse['account'] ?? null,
+                    'vbank_bank_name' => $pgResponse['bank_name'] ?? null,
+                    'vbank_expire_date' => $pgResponse['vnbank_expire_date'] ?? null,
+                    'vbank_issued_at' => now()->toIso8601String(),
+                    'pg_raw_response' => $pgResponse,
+                ]),
+            ]);
+
+            Log::info('KCP: vbank account issued', [
+                'ordr_idxx' => $ordrIdxx,
+                'tno' => $tno,
+                'bank_name' => $pgResponse['bank_name'] ?? null,
+                'account' => $pgResponse['account'] ?? null,
+            ]);
+
+            return redirect($this->resolveSuccessUrl($ordrIdxx));
+
+        } catch (\Exception $e) {
+            Log::error('KCP: vbank issuance exception', [
+                'ordr_idxx' => $ordrIdxx,
+                'error' => $e->getMessage(),
+            ]);
+
+            return redirect($this->resolveFailUrl([
+                'error' => 'vbank_issuance_failed',
+                'message' => $e->getMessage(),
+                'orderId' => $ordrIdxx,
+            ]));
         }
     }
 

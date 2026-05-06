@@ -32,11 +32,16 @@ class KcpCancelledError extends Error {
 }
 
 // KCP pay_method 비트마스크 변환 (payplus_web.jsp 규격)
+// G7 결제수단명 → KCP 비트마스크
 const KCP_PAY_METHOD: Record<string, string> = {
-    card:  '100000000000',
-    bank:  '010000000000',
-    vbank: '001000000000',
-    phone: '000100000000',
+    card:            '100000000000', // 신용카드
+    bank_transfer:   '010000000000', // 계좌이체
+    virtual_account: '001000000000', // 가상계좌
+    mobile:          '000010000000', // 휴대폰결제
+    // 내부 별칭
+    bank:            '010000000000',
+    vbank:           '001000000000',
+    phone:           '000010000000',
 };
 
 /**

@@ -150,8 +150,22 @@ class NhnKcpApiService
             $resData = $this->executeCliLinux($txCd, $ordrIdxx, $encData, $encInfo, $custIp, $paUrl, $modxData);
         }
 
+        Log::debug('KCP CLI response', [
+            'tx_cd' => $txCd,
+            'ordr_idxx' => $ordrIdxx,
+            'res_data' => $resData,
+        ]);
+
         if ($resData === '') {
             $resData = 'res_cd=9502' . chr(31) . 'res_msg=연동 모듈 호출 오류';
+        }
+
+        // KCP Windows CLI는 CP949(EUC-KR)로 한글을 출력 — MySQL UTF-8 저장을 위해 변환
+        if (! mb_check_encoding($resData, 'UTF-8')) {
+            $converted = mb_convert_encoding($resData, 'UTF-8', 'CP949');
+            if ($converted !== false) {
+                $resData = $converted;
+            }
         }
 
         parse_str(str_replace(chr(31), '&', $resData), $result);
@@ -168,11 +182,11 @@ class NhnKcpApiService
         string $paUrl,
         string $modxData,
     ): string {
-        $keyPath = $this->binDir . '/pub.key';
+        $keyPath = str_replace('/', DIRECTORY_SEPARATOR, $this->binDir . '/pub.key');
+        $binPath = str_replace('/', DIRECTORY_SEPARATOR, $this->binDir . '/pp_cli_exe.exe');
         $planData = 'payx_data=' . ($modxData !== '' ? 'mod_data=' . $modxData : '');
 
-        $command = $this->binDir . '/pp_cli_exe.exe "'
-            . 'site_cd=' . $this->siteCd . ','
+        $args = 'site_cd=' . $this->siteCd . ','
             . 'site_key=' . $this->siteKey . ','
             . 'tx_cd=' . $txCd . ','
             . 'pa_url=' . $paUrl . ','
@@ -185,10 +199,27 @@ class NhnKcpApiService
             . 'key_path=' . $keyPath . ','
             . 'log_path=,'
             . 'log_level=' . self::LOG_LEVEL . ','
-            . 'plan_data=' . $planData
-            . '"';
+            . 'plan_data=' . $planData;
 
-        return (string) exec($command);
+        $command = '"' . $binPath . '" "' . $args . '"';
+
+        Log::debug('KCP CLI command (Windows)', ['command' => $command]);
+
+        exec($command, $output, $returnCode);
+
+        Log::debug('KCP CLI exec result', [
+            'return_code' => $returnCode,
+            'output_lines' => $output,
+        ]);
+
+        // Windows 코드페이지 변경 메시지('Active code page: ...') 등 비-KCP 라인 제거
+        $kcpLines = array_filter($output, static fn (string $line) => str_contains($line, 'res_cd='));
+
+        if (empty($kcpLines)) {
+            return '';
+        }
+
+        return (string) array_values($kcpLines)[0];
     }
 
     private function executeCliLinux(

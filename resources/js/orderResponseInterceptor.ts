@@ -90,6 +90,18 @@ export function installOrderResponseInterceptor(): void {
         input: RequestInfo | URL,
         init?: RequestInit
     ): Promise<Response> {
+        // 요청 body에서 payment_method 미리 추출 (body는 한 번만 읽을 수 있음)
+        let requestPaymentMethod: string | undefined;
+        try {
+            const bodyStr = typeof init?.body === 'string' ? init.body : null;
+            if (bodyStr) {
+                const parsed = JSON.parse(bodyStr) as Record<string, unknown>;
+                requestPaymentMethod = parsed['payment_method'] as string | undefined;
+            }
+        } catch {
+            // non-JSON body는 무시
+        }
+
         const response = await originalFetch(input, init);
 
         const url = extractUrl(input);
@@ -131,9 +143,14 @@ export function installOrderResponseInterceptor(): void {
 
         logger.info('intercepted order create response — opening PG popup');
 
+        // 요청 body의 payment_method를 pgPaymentData에 주입 (buildPgPaymentData는 미포함)
+        const enrichedPgPaymentData = requestPaymentMethod
+            ? { ...pgPaymentData, pay_method: requestPaymentMethod }
+            : pgPaymentData;
+
         void requestPaymentHandler({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            params: { pgPaymentData: pgPaymentData as any },
+            params: { pgPaymentData: enrichedPgPaymentData as any },
         });
 
         const mutatedBody: OrderCreateResponseBody = {

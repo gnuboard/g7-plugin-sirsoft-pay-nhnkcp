@@ -7,6 +7,7 @@ namespace Plugins\Sirsoft\Pay\Nhnkcp\Http\Requests;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Support\Facades\Log;
 
 /**
  * KCP 결제 승인 콜백 요청 검증
@@ -31,15 +32,20 @@ class AuthCallbackRequest extends FormRequest
             'res_msg' => ['nullable', 'string'],
             'enc_data' => ['required', 'string'],
             'enc_info' => ['required', 'string'],
-            'tno' => ['required', 'string'],
+            'tno' => ['nullable', 'string'],
             'ordr_idxx' => ['required', 'string'],
-            'good_mny' => ['required', 'integer', 'min:1'],
+            'good_mny' => ['nullable', 'numeric', 'min:1'],
             'use_pay_method' => ['nullable', 'string'],
         ];
     }
 
     protected function failedValidation(Validator $validator): void
     {
+        Log::warning('KCP: authCallback validation failed', [
+            'errors' => $validator->errors()->toArray(),
+            'input' => array_keys($this->all()),
+        ]);
+
         $settings = plugin_settings(self::PLUGIN_IDENTIFIER);
         $baseUrl = $settings['redirect_fail_url'] ?? '/shop/checkout';
         $separator = str_contains($baseUrl, '?') ? '&' : '?';
