@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Modules\Sirsoft\Ecommerce\Exceptions\PaymentAmountMismatchException;
+use Carbon\Carbon;
 use Modules\Sirsoft\Ecommerce\Models\Order;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
 use Plugins\Sirsoft\Pay\Nhnkcp\Http\Requests\AuthCallbackRequest;
@@ -278,21 +279,31 @@ class PaymentCallbackController
             ]);
         }
 
-        // 가상계좌 발급 정보를 order_meta에 저장 (주문은 PENDING_PAYMENT 상태 유지)
+        // 가상계좌 발급 정보를 OrderPayment vbank 전용 컬럼에 저장 (PENDING_PAYMENT 상태 유지)
         try {
-            $existingMeta = $order->order_meta ?? [];
-            $order->update([
-                'order_meta' => array_merge($existingMeta, [
-                    'vbank_tno' => $tno,
-                    'vbank_account' => $pgResponse['account'] ?? null,
-                    'vbank_bank_name' => $pgResponse['bank_name'] ?? null,
-                    'vbank_expire_date' => $pgResponse['vnbank_expire_date'] ?? null,
-                    'vbank_issued_at' => now()->toIso8601String(),
-                    'pg_raw_response' => $pgResponse ?: null,
-                ]),
-            ]);
+            $expireRaw = $pgResponse['vnbank_expire_date'] ?? null;
+            $vbankDueAt = null;
+            if ($expireRaw) {
+                // KCP는 YYYYMMDD 또는 YYYYMMDDHHMMSS 형식으로 반환
+                try {
+                    $vbankDueAt = strlen($expireRaw) <= 8
+                        ? Carbon::createFromFormat('Ymd', $expireRaw)->endOfDay()
+                        : Carbon::createFromFormat('YmdHis', $expireRaw);
+                } catch (\Exception) {
+                    $vbankDueAt = null;
+                }
+            }
+
+            $order->payment()->update(array_filter([
+                'transaction_id'  => $tno ?: null,
+                'vbank_name'      => $pgResponse['bank_name'] ?? null,
+                'vbank_number'    => $pgResponse['account'] ?? null,
+                'vbank_due_at'    => $vbankDueAt,
+                'vbank_issued_at' => now(),
+                'payment_meta'    => $pgResponse ?: null,
+            ], fn ($v) => $v !== null));
         } catch (\Exception $e) {
-            Log::error('KCP: failed to save vbank meta to order', [
+            Log::error('KCP: failed to save vbank info to OrderPayment', [
                 'ordr_idxx' => $ordrIdxx,
                 'error' => $e->getMessage(),
             ]);
