@@ -88,7 +88,10 @@ class PaymentCallbackController
             }
 
             // 가상계좌: 계좌 발급 완료 처리 (실제 입금은 vbankNotify에서 처리)
-            if (($validated['use_pay_method'] ?? '') === 'VCNT') {
+            // KCP 콜백의 use_pay_method=VCNT 또는 주문의 payment_method=vbank 로 감지
+            $isVbank = ($validated['use_pay_method'] ?? '') === 'VCNT'
+                || ($order->payment?->payment_method?->value === 'vbank');
+            if ($isVbank) {
                 return $this->handleVbankIssued($validated, $order, $encData, $encInfo, $ordrIdxx, $custIp);
             }
 
@@ -243,27 +246,40 @@ class PaymentCallbackController
         string $ordrIdxx,
         string $custIp,
     ): \Illuminate\Http\RedirectResponse {
+        // KCP 브라우저 콜백 res_cd=0000은 계좌 발급 성공을 의미.
+        // CLI 호출로 복호화된 계좌 정보를 가져오되, CLI 실패는 계좌 상세정보 조회 실패일 뿐
+        // 계좌 발급 자체는 성공이므로 success URL로 리다이렉트한다.
+        $tno = $validated['tno'] ?? '';
+        $pgResponse = [];
+
         try {
             $pgResponse = $this->apiService->approvePayment($encData, $encInfo, $ordrIdxx, $custIp);
             $pgResCd = $pgResponse['res_cd'] ?? '';
 
-            if ($pgResCd !== self::SUCCESS_RES_CD) {
-                Log::warning('KCP: vbank account issuance failed', [
+            if ($pgResCd === self::SUCCESS_RES_CD) {
+                $tno = $pgResponse['tno'] ?? $tno;
+                Log::info('KCP: vbank account issued via CLI', [
+                    'ordr_idxx' => $ordrIdxx,
+                    'tno' => $tno,
+                    'bank_name' => $pgResponse['bank_name'] ?? null,
+                    'account' => $pgResponse['account'] ?? null,
+                ]);
+            } else {
+                Log::warning('KCP: vbank CLI returned non-0000 — account still issued, proceeding to success', [
                     'ordr_idxx' => $ordrIdxx,
                     'res_cd' => $pgResCd,
                     'res_msg' => $pgResponse['res_msg'] ?? '',
                 ]);
-
-                return redirect($this->resolveFailUrl([
-                    'error' => $pgResCd,
-                    'message' => $pgResponse['res_msg'] ?? '',
-                    'orderId' => $ordrIdxx,
-                ]));
             }
+        } catch (\Exception $e) {
+            Log::warning('KCP: vbank CLI exception — account still issued, proceeding to success', [
+                'ordr_idxx' => $ordrIdxx,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
-            $tno = $pgResponse['tno'] ?? ($validated['tno'] ?? '');
-
-            // 가상계좌 발급 정보를 order_meta에 저장 (주문은 PENDING_PAYMENT 상태 유지)
+        // 가상계좌 발급 정보를 order_meta에 저장 (주문은 PENDING_PAYMENT 상태 유지)
+        try {
             $existingMeta = $order->order_meta ?? [];
             $order->update([
                 'order_meta' => array_merge($existingMeta, [
@@ -272,31 +288,17 @@ class PaymentCallbackController
                     'vbank_bank_name' => $pgResponse['bank_name'] ?? null,
                     'vbank_expire_date' => $pgResponse['vnbank_expire_date'] ?? null,
                     'vbank_issued_at' => now()->toIso8601String(),
-                    'pg_raw_response' => $pgResponse,
+                    'pg_raw_response' => $pgResponse ?: null,
                 ]),
             ]);
-
-            Log::info('KCP: vbank account issued', [
-                'ordr_idxx' => $ordrIdxx,
-                'tno' => $tno,
-                'bank_name' => $pgResponse['bank_name'] ?? null,
-                'account' => $pgResponse['account'] ?? null,
-            ]);
-
-            return redirect($this->resolveSuccessUrl($ordrIdxx));
-
         } catch (\Exception $e) {
-            Log::error('KCP: vbank issuance exception', [
+            Log::error('KCP: failed to save vbank meta to order', [
                 'ordr_idxx' => $ordrIdxx,
                 'error' => $e->getMessage(),
             ]);
-
-            return redirect($this->resolveFailUrl([
-                'error' => 'vbank_issuance_failed',
-                'message' => $e->getMessage(),
-                'orderId' => $ordrIdxx,
-            ]));
         }
+
+        return redirect($this->resolveSuccessUrl($ordrIdxx));
     }
 
     private function resolveSuccessUrl(string $orderId): string
