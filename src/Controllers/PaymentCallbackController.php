@@ -281,10 +281,10 @@ class PaymentCallbackController
 
         // 가상계좌 발급 정보를 OrderPayment vbank 전용 컬럼에 저장 (PENDING_PAYMENT 상태 유지)
         try {
-            $expireRaw = $pgResponse['vnbank_expire_date'] ?? null;
+            $expireRaw = $pgResponse['va_date'] ?? null;
             $vbankDueAt = null;
             if ($expireRaw) {
-                // KCP는 YYYYMMDD 또는 YYYYMMDDHHMMSS 형식으로 반환
+                // KCP va_date: YYYYMMDDHHMMSS (14자리)
                 try {
                     $vbankDueAt = strlen($expireRaw) <= 8
                         ? Carbon::createFromFormat('Ymd', $expireRaw)->endOfDay()
@@ -296,8 +296,9 @@ class PaymentCallbackController
 
             $order->payment()->update(array_filter([
                 'transaction_id'  => $tno ?: null,
-                'vbank_name'      => $pgResponse['bank_name'] ?? null,
+                'vbank_name'      => $pgResponse['bankname'] ?? null,
                 'vbank_number'    => $pgResponse['account'] ?? null,
+                'vbank_holder'    => $pgResponse['depositor'] ?? null,
                 'vbank_due_at'    => $vbankDueAt,
                 'vbank_issued_at' => now(),
                 'payment_meta'    => $pgResponse ?: null,

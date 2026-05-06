@@ -19,7 +19,8 @@
         "test_mode_badge": "테스트 결제",
         "payment_type_label": "결제 수단",
         "receipt_label": "영수증",
-        "receipt_view": "영수증 조회"
+        "receipt_view": "영수증 조회",
+        "cash_receipt_view": "현금영수증 조회"
     },
     "admin": {
         "test_mode_badge": "테스트 결제",

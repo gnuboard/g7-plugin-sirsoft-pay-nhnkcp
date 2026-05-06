@@ -19,7 +19,8 @@
         "test_mode_badge": "Test Payment",
         "payment_type_label": "Payment Method",
         "receipt_label": "Receipt",
-        "receipt_view": "View Receipt"
+        "receipt_view": "View Receipt",
+        "cash_receipt_view": "View Cash Receipt"
     },
     "admin": {
         "test_mode_badge": "Test Payment",
