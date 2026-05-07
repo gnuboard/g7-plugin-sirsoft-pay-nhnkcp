@@ -84,6 +84,12 @@ export function installOrderResponseInterceptor(): void {
     }
     w[flag] = true;
 
+    // 최초 설치 플러그인이 원본 브라우저 fetch를 보존 (다른 PG 인터셉터가 쌓이기 전)
+    const ORIGINAL_FETCH_KEY = '__sirsoftPgOriginalFetch';
+    if (!w[ORIGINAL_FETCH_KEY]) {
+        w[ORIGINAL_FETCH_KEY] = window.fetch.bind(window);
+    }
+
     const originalFetch = window.fetch.bind(window);
 
     window.fetch = async function patchedFetch(
