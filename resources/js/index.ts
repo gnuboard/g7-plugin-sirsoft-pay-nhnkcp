@@ -2,7 +2,7 @@ import { handlerMap } from './handlers';
 import { installOrderResponseInterceptor } from './orderResponseInterceptor';
 import { installOrderCompleteReceiptInjector } from './orderCompleteReceiptInjector';
 
-const PLUGIN_IDENTIFIER = 'sirsoft-pay-nhnkcp';
+const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
 
 const logger = {
     info: (...args: unknown[]) => console.info(`[${PLUGIN_IDENTIFIER}]`, ...args),

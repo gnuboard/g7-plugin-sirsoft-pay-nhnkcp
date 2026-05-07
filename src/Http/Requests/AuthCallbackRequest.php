@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Plugins\Sirsoft\Pay\Nhnkcp\Http\Requests;
+namespace Plugins\Sirsoft\PayNhnkcp\Http\Requests;
 
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -12,19 +12,29 @@ use Illuminate\Support\Facades\Log;
 /**
  * KCP 결제 승인 콜백 요청 검증
  *
- * POST /plugins/sirsoft-pay-nhnkcp/payment/callback
+ * POST /plugins/sirsoft-pay_nhnkcp/payment/callback
  *
  * KCP가 브라우저를 통해 POST 방식으로 전달하는 파라미터입니다.
  */
 class AuthCallbackRequest extends FormRequest
 {
-    private const PLUGIN_IDENTIFIER = 'sirsoft-pay-nhnkcp';
+    private const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
 
+    /**
+     * 콜백 요청 인가 — 외부 PG 호출이라 항상 true
+     *
+     * @return bool 항상 true
+     */
     public function authorize(): bool
     {
         return true;
     }
 
+    /**
+     * KCP 콜백 페이로드 검증 규칙
+     *
+     * @return array<string, mixed> Laravel 검증 규칙
+     */
     public function rules(): array
     {
         return [

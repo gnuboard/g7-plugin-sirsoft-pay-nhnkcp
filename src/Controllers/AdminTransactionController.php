@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Plugins\Sirsoft\Pay\Nhnkcp\Controllers;
+namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
 
 use App\Helpers\ResponseHelper;
 use App\Http\Controllers\Api\Base\AdminBaseController;
@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\DB;
  */
 class AdminTransactionController extends AdminBaseController
 {
-    private const PLUGIN_IDENTIFIER = 'sirsoft-pay-nhnkcp';
+    private const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
 
     public function __construct(
         private readonly PluginSettingsService $pluginSettingsService,
@@ -27,7 +27,16 @@ class AdminTransactionController extends AdminBaseController
     }
 
     /**
-     * GET /api/plugins/sirsoft-pay-nhnkcp/admin/orders/{orderNumber}/transaction-status
+     * GET /api/plugins/sirsoft-pay_nhnkcp/admin/orders/{orderNumber}/transaction-status
+     */
+    /**
+     * 주문번호로 KCP 거래 조회
+     *
+     * 어드민 주문 상세에서 거래 조회 버튼 클릭 시 사용. ecommerce_order_payments
+     * 의 transaction_id (KCP tno) 를 찾아 KCP 단건 거래 조회 API 호출.
+     *
+     * @param  string  $orderNumber  주문번호
+     * @return JsonResponse 거래 정보 또는 매핑 없을 시 null
      */
     public function queryByOrder(string $orderNumber): JsonResponse
     {

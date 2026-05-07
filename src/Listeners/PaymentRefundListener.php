@@ -2,18 +2,23 @@
 
 declare(strict_types=1);
 
-namespace Plugins\Sirsoft\Pay\Nhnkcp\Listeners;
+namespace Plugins\Sirsoft\PayNhnkcp\Listeners;
 
 use App\Contracts\Extension\HookListenerInterface;
 use Illuminate\Support\Facades\Log;
 use Modules\Sirsoft\Ecommerce\Models\Order;
 use Modules\Sirsoft\Ecommerce\Models\OrderPayment;
-use Plugins\Sirsoft\Pay\Nhnkcp\Services\NhnKcpApiService;
+use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
 
 class PaymentRefundListener implements HookListenerInterface
 {
     private const PG_PROVIDER_ID = 'nhnkcp';
 
+    /**
+     * 구독할 훅 매핑 반환
+     *
+     * @return array<string, array<string, mixed>> 훅 구독 설정
+     */
     public static function getSubscribedHooks(): array
     {
         return [
@@ -25,8 +30,26 @@ class PaymentRefundListener implements HookListenerInterface
         ];
     }
 
+    /**
+     * 기본 핸들러 (미사용 — 개별 메서드에서 처리)
+     *
+     * @param  mixed  ...$args  훅 인수
+     */
     public function handle(...$args): void {}
 
+    /**
+     * 환불 처리 훅 핸들러 (sirsoft-ecommerce.payment.refund 필터)
+     *
+     * KCP 결제 건 (pg_provider=nhnkcp) 만 처리. before_cancel/after_cancel
+     * 액션 훅을 발행하여 외부 확장 지점 제공.
+     *
+     * @param  array  $result  이전 필터 누적 결과
+     * @param  Order  $order  대상 주문
+     * @param  OrderPayment  $payment  대상 결제 정보
+     * @param  float  $refundAmount  환불 금액
+     * @param  string|null  $reason  환불 사유 (없으면 기본 메시지)
+     * @return array success / error_code / error_message / transaction_id
+     */
     public function processRefund(
         array $result,
         Order $order,
@@ -43,7 +66,7 @@ class PaymentRefundListener implements HookListenerInterface
             return [
                 'success' => false,
                 'error_code' => 'MISSING_TNO',
-                'error_message' => __('sirsoft-pay-nhnkcp::messages.refund.missing_tid'),
+                'error_message' => __('sirsoft-pay_nhnkcp::messages.refund.missing_tid'),
                 'transaction_id' => null,
             ];
         }
@@ -51,7 +74,7 @@ class PaymentRefundListener implements HookListenerInterface
         try {
             $apiService = app(NhnKcpApiService::class);
 
-            $cancelMsg = $reason ?? __('sirsoft-pay-nhnkcp::messages.refund.default_reason');
+            $cancelMsg = $reason ?? __('sirsoft-pay_nhnkcp::messages.refund.default_reason');
             $cancelAmt = (int) $refundAmount;
             $ordrIdxx = (string) $order->order_number;
 

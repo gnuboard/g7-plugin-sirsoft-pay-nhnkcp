@@ -1,11 +1,11 @@
 <?php
 
-namespace Plugins\Sirsoft\Pay\Nhnkcp\Tests\Unit\Services;
+namespace Plugins\Sirsoft\PayNhnkcp\Tests\Unit\Services;
 
 use App\Services\PluginSettingsService;
 use Illuminate\Support\Facades\Http;
-use Plugins\Sirsoft\Pay\Nhnkcp\Services\NhnKcpApiService;
-use Plugins\Sirsoft\Pay\Nhnkcp\Tests\PluginTestCase;
+use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
+use Plugins\Sirsoft\PayNhnkcp\Tests\PluginTestCase;
 
 class NhnKcpApiServiceTest extends PluginTestCase
 {

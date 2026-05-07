@@ -1,6 +1,6 @@
 <?php
 
-namespace Plugins\Sirsoft\Pay\Nhnkcp;
+namespace Plugins\Sirsoft\PayNhnkcp;
 
 use App\Extension\AbstractPlugin;
 
@@ -118,7 +118,7 @@ class Plugin extends AbstractPlugin
     {
         return [
             [
-                'name' => 'sirsoft-pay-nhnkcp.payment.before_confirm',
+                'name' => 'sirsoft-pay_nhnkcp.payment.before_confirm',
                 'type' => 'action',
                 'description' => [
                     'ko' => 'KCP 결제 승인 확인 전',
@@ -126,11 +126,27 @@ class Plugin extends AbstractPlugin
                 ],
             ],
             [
-                'name' => 'sirsoft-pay-nhnkcp.payment.after_confirm',
+                'name' => 'sirsoft-pay_nhnkcp.payment.after_confirm',
                 'type' => 'action',
                 'description' => [
                     'ko' => 'KCP 결제 승인 확인 완료 후',
                     'en' => 'After KCP payment confirmation completed',
+                ],
+            ],
+            [
+                'name' => 'sirsoft-pay_nhnkcp.payment.before_cancel',
+                'type' => 'action',
+                'description' => [
+                    'ko' => 'KCP 결제 취소 API 호출 전 (본인인증 등 확장 지점)',
+                    'en' => 'Before KCP cancel API call (extension point for re-auth, etc.)',
+                ],
+            ],
+            [
+                'name' => 'sirsoft-pay_nhnkcp.payment.after_cancel',
+                'type' => 'action',
+                'description' => [
+                    'ko' => 'KCP 결제 취소 완료 후',
+                    'en' => 'After KCP cancel completed',
                 ],
             ],
         ];

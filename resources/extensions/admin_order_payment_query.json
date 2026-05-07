@@ -4,7 +4,7 @@
         {
             "id": "kcp_status",
             "type": "api",
-            "endpoint": "/api/plugins/sirsoft-pay-nhnkcp/admin/orders/{{route.orderNumber}}/transaction-status",
+            "endpoint": "/api/plugins/sirsoft-pay_nhnkcp/admin/orders/{{route.orderNumber}}/transaction-status",
             "method": "GET",
             "auto_fetch": true,
             "auth_required": true
@@ -30,13 +30,13 @@
                             "type": "basic",
                             "name": "Span",
                             "props": { "className": "text-sm font-semibold text-orange-800 dark:text-orange-300" },
-                            "text": "$t:sirsoft-pay-nhnkcp.admin.test_mode_badge"
+                            "text": "$t:sirsoft-pay_nhnkcp.admin.test_mode_badge"
                         },
                         {
                             "type": "basic",
                             "name": "Span",
                             "props": { "className": "text-sm text-orange-700 dark:text-orange-400" },
-                            "text": "$t:sirsoft-pay-nhnkcp.admin.test_mode_order_notice"
+                            "text": "$t:sirsoft-pay_nhnkcp.admin.test_mode_order_notice"
                         }
                     ]
                 }
@@ -67,27 +67,27 @@
                                     "type": "basic",
                                     "name": "H3",
                                     "props": { "className": "text-sm font-semibold text-gray-800 dark:text-gray-200" },
-                                    "text": "$t:sirsoft-pay-nhnkcp.admin.order_info_title"
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.order_info_title"
                                 },
                                 {
                                     "type": "basic",
                                     "name": "Span",
                                     "props": { "className": "text-xs text-gray-400 dark:text-gray-500 hidden sm:inline" },
-                                    "text": "$t:sirsoft-pay-nhnkcp.admin.order_info_description"
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.order_info_description"
                                 },
                                 {
                                     "type": "basic",
                                     "name": "Span",
                                     "if": "{{kcp_status.data?.res_cd === '0000'}}",
                                     "props": { "className": "ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300" },
-                                    "text": "$t:sirsoft-pay-nhnkcp.admin.pay_status_approved"
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.pay_status_approved"
                                 },
                                 {
                                     "type": "basic",
                                     "name": "Span",
                                     "if": "{{kcp_status.data?.res_cd !== '0000'}}",
                                     "props": { "className": "ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300" },
-                                    "text": "$t:sirsoft-pay-nhnkcp.admin.pay_status_unknown"
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.pay_status_unknown"
                                 }
                             ]
                         },
@@ -100,7 +100,7 @@
                                     "type": "basic",
                                     "name": "Span",
                                     "props": { "className": "text-gray-500 dark:text-gray-400" },
-                                    "text": "$t:sirsoft-pay-nhnkcp.admin.result_tno"
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.result_tno"
                                 },
                                 {
                                     "type": "basic",
@@ -112,7 +112,7 @@
                                     "type": "basic",
                                     "name": "Span",
                                     "props": { "className": "text-gray-500 dark:text-gray-400" },
-                                    "text": "$t:sirsoft-pay-nhnkcp.admin.result_app_no"
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.result_app_no"
                                 },
                                 {
                                     "type": "basic",
@@ -124,7 +124,7 @@
                                     "type": "basic",
                                     "name": "Span",
                                     "props": { "className": "text-gray-500 dark:text-gray-400" },
-                                    "text": "$t:sirsoft-pay-nhnkcp.admin.result_app_time"
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.result_app_time"
                                 },
                                 {
                                     "type": "basic",
@@ -136,7 +136,7 @@
                                     "type": "basic",
                                     "name": "Span",
                                     "props": { "className": "text-gray-500 dark:text-gray-400" },
-                                    "text": "$t:sirsoft-pay-nhnkcp.admin.result_pay_method"
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.result_pay_method"
                                 },
                                 {
                                     "type": "basic",
@@ -148,7 +148,7 @@
                                     "type": "basic",
                                     "name": "Span",
                                     "props": { "className": "text-gray-500 dark:text-gray-400" },
-                                    "text": "$t:sirsoft-pay-nhnkcp.admin.result_res_cd"
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.result_res_cd"
                                 },
                                 {
                                     "type": "basic",

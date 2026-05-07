@@ -1,6 +1,6 @@
 <?php
 
-namespace Plugins\Sirsoft\Pay\Nhnkcp\Tests\Feature\Controllers;
+namespace Plugins\Sirsoft\PayNhnkcp\Tests\Feature\Controllers;
 
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
@@ -10,7 +10,7 @@ use Modules\Sirsoft\Ecommerce\Enums\OrderStatusEnum;
 use Modules\Sirsoft\Ecommerce\Enums\PaymentMethodEnum;
 use Modules\Sirsoft\Ecommerce\Enums\PaymentStatusEnum;
 use Modules\Sirsoft\Ecommerce\Models\Order;
-use Plugins\Sirsoft\Pay\Nhnkcp\Tests\PluginTestCase;
+use Plugins\Sirsoft\PayNhnkcp\Tests\PluginTestCase;
 
 class PaymentCallbackControllerTest extends PluginTestCase
 {
@@ -124,7 +124,7 @@ class PaymentCallbackControllerTest extends PluginTestCase
             ),
         ]);
 
-        $response = $this->post('/plugins/sirsoft-pay-nhnkcp/payment/callback', $params);
+        $response = $this->post('/plugins/sirsoft-pay_nhnkcp/payment/callback', $params);
 
         $response->assertRedirect("/shop/orders/{$order->order_number}/complete");
 
@@ -146,7 +146,7 @@ class PaymentCallbackControllerTest extends PluginTestCase
             'res_msg' => '사용자 취소',
         ]);
 
-        $response = $this->post('/plugins/sirsoft-pay-nhnkcp/payment/callback', $params);
+        $response = $this->post('/plugins/sirsoft-pay_nhnkcp/payment/callback', $params);
 
         $response->assertRedirect();
         $this->assertStringContainsString('error=8001', $response->headers->get('Location'));
@@ -166,7 +166,7 @@ class PaymentCallbackControllerTest extends PluginTestCase
             ),
         ]);
 
-        $response = $this->post('/plugins/sirsoft-pay-nhnkcp/payment/callback', $params);
+        $response = $this->post('/plugins/sirsoft-pay_nhnkcp/payment/callback', $params);
 
         $response->assertRedirect();
         $this->assertStringContainsString('error=order_not_found', $response->headers->get('Location'));
@@ -187,7 +187,7 @@ class PaymentCallbackControllerTest extends PluginTestCase
             ),
         ]);
 
-        $response = $this->post('/plugins/sirsoft-pay-nhnkcp/payment/callback', $params);
+        $response = $this->post('/plugins/sirsoft-pay_nhnkcp/payment/callback', $params);
 
         $response->assertRedirect();
         $this->assertStringContainsString('error=9999', $response->headers->get('Location'));
@@ -204,7 +204,7 @@ class PaymentCallbackControllerTest extends PluginTestCase
             'stgapi.kcp.co.kr/*' => Http::response(null, 500),
         ]);
 
-        $response = $this->post('/plugins/sirsoft-pay-nhnkcp/payment/callback', $params);
+        $response = $this->post('/plugins/sirsoft-pay_nhnkcp/payment/callback', $params);
 
         $response->assertRedirect();
         $this->assertStringContainsString('error=confirm_failed', $response->headers->get('Location'));
@@ -214,7 +214,7 @@ class PaymentCallbackControllerTest extends PluginTestCase
     {
         $this->mockPluginSettings();
 
-        $response = $this->post('/plugins/sirsoft-pay-nhnkcp/payment/callback', [
+        $response = $this->post('/plugins/sirsoft-pay_nhnkcp/payment/callback', [
             'res_cd' => '0000',
         ]);
 
@@ -237,7 +237,7 @@ class PaymentCallbackControllerTest extends PluginTestCase
             ),
         ]);
 
-        $response = $this->post('/plugins/sirsoft-pay-nhnkcp/payment/callback', $params);
+        $response = $this->post('/plugins/sirsoft-pay_nhnkcp/payment/callback', $params);
 
         $response->assertRedirect("/custom/payment/{$order->order_number}/done");
     }
@@ -258,7 +258,7 @@ class PaymentCallbackControllerTest extends PluginTestCase
         ]);
 
         $response = $this->post(
-            '/plugins/sirsoft-pay-nhnkcp/payment/callback',
+            '/plugins/sirsoft-pay_nhnkcp/payment/callback',
             $params,
             ['User-Agent' => 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)']
         );
@@ -276,7 +276,7 @@ class PaymentCallbackControllerTest extends PluginTestCase
     {
         $order = $this->createTestOrder(30000);
 
-        $response = $this->post('/plugins/sirsoft-pay-nhnkcp/payment/vbank-notify', [
+        $response = $this->post('/plugins/sirsoft-pay_nhnkcp/payment/vbank-notify', [
             'tno' => 'KCP_VBANK_TNO_001',
             'ordr_idxx' => $order->order_number,
             'good_mny' => 30000,
@@ -297,7 +297,7 @@ class PaymentCallbackControllerTest extends PluginTestCase
 
     public function test_vbank_notify_returns_ok_on_non_0000_res_cd(): void
     {
-        $response = $this->post('/plugins/sirsoft-pay-nhnkcp/payment/vbank-notify', [
+        $response = $this->post('/plugins/sirsoft-pay_nhnkcp/payment/vbank-notify', [
             'tno' => 'KCP_VBANK_TNO_002',
             'ordr_idxx' => 'ORD-TEST-CANCEL',
             'good_mny' => 30000,
@@ -311,7 +311,7 @@ class PaymentCallbackControllerTest extends PluginTestCase
 
     public function test_vbank_notify_returns_fail_on_order_not_found(): void
     {
-        $response = $this->post('/plugins/sirsoft-pay-nhnkcp/payment/vbank-notify', [
+        $response = $this->post('/plugins/sirsoft-pay_nhnkcp/payment/vbank-notify', [
             'tno' => 'KCP_VBANK_TNO_003',
             'ordr_idxx' => 'NON_EXISTENT_ORDER',
             'good_mny' => 30000,

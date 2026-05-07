@@ -64,7 +64,7 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
     const { pgPaymentData } = (action.params || {}) as RequestPaymentParams;
 
     if (!pgPaymentData) {
-        console.error('[sirsoft-pay-nhnkcp] pgPaymentData is required');
+        console.error('[sirsoft-pay_nhnkcp] pgPaymentData is required');
         return;
     }
 
@@ -75,7 +75,7 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
         const configJson = await G7Core.api.get('/modules/sirsoft-ecommerce/payments/client-config/nhnkcp');
 
         if (!configJson.data) {
-            console.error('[sirsoft-pay-nhnkcp] Failed to fetch client config', configJson);
+            console.error('[sirsoft-pay_nhnkcp] Failed to fetch client config', configJson);
             return;
         }
 
@@ -187,7 +187,7 @@ try {
             return;
         }
 
-        console.error('[sirsoft-pay-nhnkcp] requestPayment error', error);
+        console.error('[sirsoft-pay_nhnkcp] requestPayment error', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         G7Core?.state?.setLocal?.({ paymentErrorMessage: errorMessage, isSubmittingOrder: false, paymentMethod: pgPaymentData.pay_method ?? 'card' });
         G7Core?.modal?.open?.('nhnkcp_payment_error_modal');

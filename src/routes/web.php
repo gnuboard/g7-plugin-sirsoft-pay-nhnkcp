@@ -1,14 +1,14 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Plugins\Sirsoft\Pay\Nhnkcp\Controllers\PaymentCallbackController;
+use Plugins\Sirsoft\PayNhnkcp\Controllers\PaymentCallbackController;
 
 /*
 |--------------------------------------------------------------------------
 | NHN KCP Plugin Web Routes
 |--------------------------------------------------------------------------
 |
-| 프리픽스: /plugins/sirsoft-pay-nhnkcp (PluginRouteServiceProvider 자동 적용)
+| 프리픽스: /plugins/sirsoft-pay_nhnkcp (PluginRouteServiceProvider 자동 적용)
 | 미들웨어: web (PluginRouteServiceProvider 자동 적용)
 |
 | KCP Standard Pay는 브라우저 POST 콜백 방식이므로 CSRF 미들웨어를 제외합니다.

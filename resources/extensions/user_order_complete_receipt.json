@@ -20,7 +20,7 @@
                                     "type": "basic",
                                     "name": "Span",
                                     "props": { "className": "text-gray-600 dark:text-gray-400 text-sm" },
-                                    "text": "$t:sirsoft-pay-nhnkcp.user.receipt_label"
+                                    "text": "$t:sirsoft-pay_nhnkcp.user.receipt_label"
                                 },
                                 {
                                     "type": "basic",
@@ -48,7 +48,7 @@
                                                         {
                                                             "handler": "apiCall",
                                                             "auth_required": true,
-                                                            "target": "/api/plugins/sirsoft-pay-nhnkcp/user/orders/{{route.id}}/receipt",
+                                                            "target": "/api/plugins/sirsoft-pay_nhnkcp/user/orders/{{route.id}}/receipt",
                                                             "params": { "method": "GET" },
                                                             "onSuccess": [
                                                                 {
@@ -88,7 +88,7 @@
                                                 {
                                                     "type": "basic",
                                                     "name": "Span",
-                                                    "text": "$t:sirsoft-pay-nhnkcp.user.receipt_view"
+                                                    "text": "$t:sirsoft-pay_nhnkcp.user.receipt_view"
                                                 }
                                             ]
                                         },
@@ -111,7 +111,7 @@
                                                 {
                                                     "type": "basic",
                                                     "name": "Span",
-                                                    "text": "$t:sirsoft-pay-nhnkcp.user.receipt_view"
+                                                    "text": "$t:sirsoft-pay_nhnkcp.user.receipt_view"
                                                 }
                                             ]
                                         },
@@ -134,7 +134,7 @@
                                                 {
                                                     "type": "basic",
                                                     "name": "Span",
-                                                    "text": "$t:sirsoft-pay-nhnkcp.user.cash_receipt_view"
+                                                    "text": "$t:sirsoft-pay_nhnkcp.user.cash_receipt_view"
                                                 }
                                             ]
                                         }

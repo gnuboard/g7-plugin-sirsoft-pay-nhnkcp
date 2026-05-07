@@ -20,7 +20,7 @@ import { requestPaymentHandler } from './handlers/requestPayment';
 
 const ORDER_CREATE_PATH = '/api/modules/sirsoft-ecommerce/user/orders';
 const TARGET_PG_PROVIDER = 'sirsoft-nhnkcp';
-const PLUGIN_IDENTIFIER = 'sirsoft-pay-nhnkcp';
+const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
 
 const logger = {
     info: (...args: unknown[]) => console.info(`[${PLUGIN_IDENTIFIER}]`, ...args),

@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Plugins\Sirsoft\Pay\Nhnkcp\Controllers;
+namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
 
 use App\Services\PluginSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Plugins\Sirsoft\Pay\Nhnkcp\Services\NhnKcpApiService;
+use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
 
 class UserReceiptController
 {
-    private const PLUGIN_IDENTIFIER = 'sirsoft-pay-nhnkcp';
+    private const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
 
     // 카드/계좌이체 영수증 URL (cmd= 로 끝나므로 cmd 값을 바로 붙임)
     private const BILL_URL_TEST = 'https://testadmin8.kcp.co.kr/assist/bill.BillActionNew.do?cmd=';
@@ -30,7 +30,17 @@ class UserReceiptController
     ) {}
 
     /**
-     * GET /api/plugins/sirsoft-pay-nhnkcp/user/orders/{orderNumber}/receipt
+     * GET /api/plugins/sirsoft-pay_nhnkcp/user/orders/{orderNumber}/receipt
+     */
+    /**
+     * 사용자 마이페이지 KCP 영수증 정보 조회
+     *
+     * 결제 영수증 URL(신용카드)과 현금영수증 URL(현금/계좌이체)을 반환한다.
+     * receipt_url 이 비어있으면 transaction_id (tno) 로 KCP 영수증 URL 을 동적 생성.
+     *
+     * @param  Request  $request  인증된 사용자 요청
+     * @param  string  $orderNumber  주문번호
+     * @return JsonResponse receipt_url / cash_receipt_url 또는 404
      */
     public function show(Request $request, string $orderNumber): JsonResponse
     {

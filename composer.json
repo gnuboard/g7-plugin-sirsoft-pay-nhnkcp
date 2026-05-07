@@ -1,5 +1,5 @@
 {
-    "name": "plugins/sirsoft-pay-nhnkcp",
+    "name": "plugins/sirsoft-pay_nhnkcp",
     "description": "NHN KCP PG Plugin for G7 platform",
     "version": "1.0.0-beta.1",
     "type": "library",
@@ -14,7 +14,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Plugins\\Sirsoft\\Pay\\Nhnkcp\\": ["src/", "./"]
+            "Plugins\\Sirsoft\\PayNhnkcp\\": ["src/", "./"]
         }
     }
 }

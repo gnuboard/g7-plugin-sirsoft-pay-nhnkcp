@@ -1,4 +1,4 @@
-const PLUGIN_ID = 'sirsoft-pay-nhnkcp';
+const PLUGIN_ID = 'sirsoft-pay_nhnkcp';
 const FLAG = '__kcpOcReceiptInjectorInstalled';
 const BTN_ID = 'kcp-oc-receipt-btn';
 

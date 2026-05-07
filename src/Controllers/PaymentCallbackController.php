@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Plugins\Sirsoft\Pay\Nhnkcp\Controllers;
+namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
 
 use App\Extension\HookManager;
 use App\Services\PluginSettingsService;
@@ -13,9 +13,9 @@ use Modules\Sirsoft\Ecommerce\Exceptions\PaymentAmountMismatchException;
 use Carbon\Carbon;
 use Modules\Sirsoft\Ecommerce\Models\Order;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
-use Plugins\Sirsoft\Pay\Nhnkcp\Http\Requests\AuthCallbackRequest;
-use Plugins\Sirsoft\Pay\Nhnkcp\Http\Requests\VbankNotifyRequest;
-use Plugins\Sirsoft\Pay\Nhnkcp\Services\NhnKcpApiService;
+use Plugins\Sirsoft\PayNhnkcp\Http\Requests\AuthCallbackRequest;
+use Plugins\Sirsoft\PayNhnkcp\Http\Requests\VbankNotifyRequest;
+use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
 
 /**
  * KCP 결제 콜백 컨트롤러
@@ -26,7 +26,7 @@ use Plugins\Sirsoft\Pay\Nhnkcp\Services\NhnKcpApiService;
  */
 class PaymentCallbackController
 {
-    private const PLUGIN_IDENTIFIER = 'sirsoft-pay-nhnkcp';
+    private const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
 
     private const SUCCESS_RES_CD = '0000';
 
@@ -39,8 +39,18 @@ class PaymentCallbackController
     /**
      * KCP 결제 승인 콜백
      *
-     * POST /plugins/sirsoft-pay-nhnkcp/payment/callback
+     * POST /plugins/sirsoft-pay_nhnkcp/payment/callback
      * (CSRF 제외 - KCP가 브라우저 통해 POST 전달)
+     */
+    /**
+     * KCP 결제 승인 콜백
+     *
+     * 1단계: KCP Standard Pay 가 결제창 완료 후 ReturnURL 로 POST 콜백.
+     * 2단계: enc_data + enc_info 로 서버 승인 요청. 결제 수단별로 가상계좌(계좌발급)/
+     * 카드(즉시완료) 분기. 사용자 취소 / 인증 실패 시 에러 query 로 체크아웃 복귀.
+     *
+     * @param  AuthCallbackRequest  $request  검증된 콜백 페이로드
+     * @return \Illuminate\Http\RedirectResponse 성공/실패 URL 로 리다이렉트
      */
     public function authCallback(AuthCallbackRequest $request): \Illuminate\Http\RedirectResponse
     {
@@ -96,12 +106,12 @@ class PaymentCallbackController
                 return $this->handleVbankIssued($validated, $order, $encData, $encInfo, $ordrIdxx, $custIp);
             }
 
-            HookManager::doAction('sirsoft-pay-nhnkcp.payment.before_confirm', $order, $validated);
+            HookManager::doAction('sirsoft-pay_nhnkcp.payment.before_confirm', $order, $validated);
 
             // 3단계: KCP CLI로 최종 승인 확인
             $pgResponse = $this->apiService->approvePayment($encData, $encInfo, $ordrIdxx, $custIp);
 
-            HookManager::doAction('sirsoft-pay-nhnkcp.payment.after_confirm', $order, $pgResponse);
+            HookManager::doAction('sirsoft-pay_nhnkcp.payment.after_confirm', $order, $pgResponse);
 
             $pgResCd = $pgResponse['res_cd'] ?? '';
 
@@ -178,8 +188,18 @@ class PaymentCallbackController
     /**
      * KCP 가상계좌 입금 통보 처리
      *
-     * POST /plugins/sirsoft-pay-nhnkcp/payment/vbank-notify
+     * POST /plugins/sirsoft-pay_nhnkcp/payment/vbank-notify
      * (KCP 서버 → 우리 서버, CSRF 제외)
+     */
+    /**
+     * 가상계좌 입금 통보 처리
+     *
+     * KCP 서버가 직접 호출하는 입금 확인 웹훅. res_cd '0000' 입금완료 통보만
+     * 결제완료 처리하고 그 외 코드는 payment_meta 에 timeline 으로 누적.
+     * 어떤 결과든 200 + 정확히 "OK" 응답으로 KCP 재시도 차단.
+     *
+     * @param  VbankNotifyRequest  $request  검증된 입금통보 페이로드
+     * @return Response 항상 200 + "OK" (text/plain)
      */
     public function vbankNotify(VbankNotifyRequest $request): Response
     {

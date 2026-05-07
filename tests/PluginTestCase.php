@@ -1,6 +1,6 @@
 <?php
 
-namespace Plugins\Sirsoft\Pay\Nhnkcp\Tests;
+namespace Plugins\Sirsoft\PayNhnkcp\Tests;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -74,7 +74,7 @@ abstract class PluginTestCase extends TestCase
 
     protected function registerPluginAutoload(): void
     {
-        $pluginBasePath = base_path('plugins/sirsoft-pay-nhnkcp/src/');
+        $pluginBasePath = base_path('plugins/sirsoft-pay_nhnkcp/src/');
 
         spl_autoload_register(function ($class) use ($pluginBasePath) {
             $prefix = 'Plugins\\Sirsoft\\Nhnkcp\\';
@@ -107,11 +107,11 @@ abstract class PluginTestCase extends TestCase
 
     protected function registerPluginRoutes(): void
     {
-        $webRoutesFile = base_path('plugins/sirsoft-pay-nhnkcp/src/routes/web.php');
+        $webRoutesFile = base_path('plugins/sirsoft-pay_nhnkcp/src/routes/web.php');
 
         if (file_exists($webRoutesFile)) {
-            \Illuminate\Support\Facades\Route::prefix('plugins/sirsoft-pay-nhnkcp')
-                ->name('plugins.sirsoft-pay-nhnkcp.')
+            \Illuminate\Support\Facades\Route::prefix('plugins/sirsoft-pay_nhnkcp')
+                ->name('plugins.sirsoft-pay_nhnkcp.')
                 ->middleware('web')
                 ->group($webRoutesFile);
         }

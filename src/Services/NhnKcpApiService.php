@@ -2,14 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Plugins\Sirsoft\Pay\Nhnkcp\Services;
+namespace Plugins\Sirsoft\PayNhnkcp\Services;
 
+use App\Extension\HookManager;
 use App\Services\PluginSettingsService;
 use Illuminate\Support\Facades\Log;
+use Plugins\Sirsoft\PayNhnkcp\Exceptions\NhnKcpApiException;
 
 class NhnKcpApiService
 {
-    private const PLUGIN_IDENTIFIER = 'sirsoft-pay-nhnkcp';
+    private const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
 
     private const PA_URL_TEST = 'testpaygw.kcp.co.kr';
 
@@ -50,11 +52,21 @@ class NhnKcpApiService
         $this->binDir = dirname(__DIR__, 2) . '/bin';
     }
 
+    /**
+     * 활성 site_cd 반환 (테스트/라이브 자동 분기)
+     *
+     * @return string KCP site_cd
+     */
     public function getSiteCd(): string
     {
         return $this->siteCd;
     }
 
+    /**
+     * Standard Pay JS SDK URL 반환 (테스트/라이브 자동 분기)
+     *
+     * @return string SDK URL
+     */
     public function getJsUrl(): string
     {
         return $this->isTest ? self::JS_URL_TEST : self::JS_URL_LIVE;
@@ -63,12 +75,13 @@ class NhnKcpApiService
     /**
      * KCP 결제 승인 (CLI 방식)
      *
-     * 브라우저 콜백으로 수신한 enc_data, enc_info를 CLI에 전달하여 최종 승인합니다.
+     * Standard Pay 결제창 완료 후 받은 enc_data / enc_info 로 KCP CLI 를 통해
+     * 서버 승인 요청. 응답 res_cd = '0000' 이면 성공.
      *
-     * @param string $encData  KCP 암호화 결제 데이터
-     * @param string $encInfo  KCP 암호화 결제 정보
-     * @param string $ordrIdxx 주문번호
-     * @param string $custIp   고객 IP
+     * @param  string  $encData  KCP 암호화 결제 데이터
+     * @param  string  $encInfo  KCP 암호화 결제 정보
+     * @param  string  $ordrIdxx  주문번호
+     * @param  string  $custIp  고객 IP
      * @return array 파싱된 KCP 응답 (res_cd, res_msg, tno, app_no, card_no, quota 등)
      */
     public function approvePayment(string $encData, string $encInfo, string $ordrIdxx, string $custIp): array
@@ -113,6 +126,9 @@ class NhnKcpApiService
                 . 'mod_mny=' . $cancelAmt . chr(31);
         }
 
+        // 훅: 결제 취소 전 (본인인증 등 확장 지점)
+        HookManager::doAction('sirsoft-pay_nhnkcp.payment.before_cancel', $tno, $ordrIdxx, $cancelAmt, $cancelMsg);
+
         $result = $this->executeCli(
             txCd: self::TX_CANCEL,
             ordrIdxx: $ordrIdxx,
@@ -128,8 +144,11 @@ class NhnKcpApiService
                 'res_msg' => $result['res_msg'] ?? '',
                 'tno' => $tno,
             ]);
-            throw new \Exception($result['res_msg'] ?? 'KCP cancel failed');
+            throw new NhnKcpApiException($result['res_msg'] ?? 'KCP cancel failed');
         }
+
+        // 훅: 결제 취소 완료 후 (외부 소비자 후처리 확장 지점)
+        HookManager::doAction('sirsoft-pay_nhnkcp.payment.after_cancel', $tno, $result);
 
         return $result;
     }

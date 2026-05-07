@@ -1,15 +1,15 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Plugins\Sirsoft\Pay\Nhnkcp\Controllers\AdminTransactionController;
-use Plugins\Sirsoft\Pay\Nhnkcp\Controllers\UserReceiptController;
+use Plugins\Sirsoft\PayNhnkcp\Controllers\AdminTransactionController;
+use Plugins\Sirsoft\PayNhnkcp\Controllers\UserReceiptController;
 
 /*
 |--------------------------------------------------------------------------
 | NHN KCP Plugin API Routes
 |--------------------------------------------------------------------------
 |
-| 프리픽스: /api/plugins/sirsoft-pay-nhnkcp (PluginRouteServiceProvider 자동 적용)
+| 프리픽스: /api/plugins/sirsoft-pay_nhnkcp (PluginRouteServiceProvider 자동 적용)
 | 미들웨어: api (PluginRouteServiceProvider 자동 적용)
 |
 */
@@ -25,7 +25,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth:sanctum', 'admin'])->g
         return response()->json([
             'success' => true,
             'data' => [
-                'url' => url('/plugins/sirsoft-pay-nhnkcp/payment/vbank-notify'),
+                'url' => url('/plugins/sirsoft-pay_nhnkcp/payment/vbank-notify'),
             ],
         ]);
     })->name('vbank.notify.url');
