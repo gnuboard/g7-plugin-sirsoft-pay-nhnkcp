@@ -183,13 +183,13 @@ try {
     } catch (error: unknown) {
         if (error instanceof KcpCancelledError) {
             // 사용자가 결제 취소 → 에러 모달 없이 조용히 상태 복원
-            G7Core?.state?.setLocal?.({ isSubmittingOrder: false });
+            G7Core?.state?.setLocal?.({ isSubmittingOrder: false, paymentMethod: pgPaymentData.pay_method ?? 'card' });
             return;
         }
 
         console.error('[sirsoft-pay-nhnkcp] requestPayment error', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        G7Core?.state?.setLocal?.({ paymentErrorMessage: errorMessage, isSubmittingOrder: false });
+        G7Core?.state?.setLocal?.({ paymentErrorMessage: errorMessage, isSubmittingOrder: false, paymentMethod: pgPaymentData.pay_method ?? 'card' });
         G7Core?.modal?.open?.('nhnkcp_payment_error_modal');
     }
 }
