@@ -1,0 +1,67 @@
+{
+    "messages": {
+        "refund": {
+            "missing_tid": "결제 거래번호(tno)가 없습니다.",
+            "default_reason": "관리자 환불"
+        },
+        "payment": {
+            "auth_failed": "KCP 결제 인증에 실패했습니다.",
+            "order_not_found": "주문을 찾을 수 없습니다.",
+            "amount_mismatch": "결제 금액이 일치하지 않습니다.",
+            "confirm_failed": "KCP 거래 조회에 실패했습니다."
+        }
+    },
+    "payment_error": {
+        "title": "결제 오류",
+        "message": "결제 처리 중 오류가 발생했습니다."
+    },
+    "user": {
+        "test_mode_badge": "테스트 결제",
+        "payment_type_label": "결제 수단",
+        "receipt_label": "영수증",
+        "receipt_view": "영수증 조회",
+        "cash_receipt_view": "현금영수증 조회"
+    },
+    "admin": {
+        "test_mode_badge": "테스트 결제",
+        "test_mode_order_notice": "이 주문은 테스트 결제로 처리되었습니다.",
+        "order_info_title": "NHN KCP 결제 정보",
+        "order_info_description": "DB에 저장된 KCP 결제 정보를 표시합니다.",
+        "pay_status_approved": "승인",
+        "pay_status_cancelled": "취소",
+        "pay_status_unknown": "미확인",
+        "result_tno": "거래번호 (TNO)",
+        "result_app_no": "승인번호",
+        "result_app_time": "승인일시",
+        "result_pay_method": "결제수단",
+        "result_res_cd": "응답코드"
+    },
+    "settings": {
+        "title": "NHN KCP 설정",
+        "description": "NHN KCP 결제 플러그인 설정을 관리합니다.",
+        "test_mode": "테스트 모드",
+        "test_mode_hint": "테스트 모드에서는 실제 결제가 발생하지 않습니다.",
+        "live_mode_warning_title": "라이브 모드 활성화",
+        "live_mode_warning_body": "실제 결제가 발생합니다. 라이브 사이트 코드 및 키를 정확히 설정했는지 확인하세요.",
+        "section_test_keys": "테스트 인증 정보",
+        "test_site_cd": "테스트 사이트 코드 (site_cd)",
+        "test_site_cd_hint": "KCP에서 발급받은 테스트 사이트 코드 (기본값: T0000)",
+        "test_site_key": "테스트 사이트 키 (site_key)",
+        "test_site_key_hint": "KCP에서 발급받은 테스트 사이트 키",
+        "section_live_keys": "라이브 인증 정보",
+        "live_site_cd": "라이브 사이트 코드 (site_cd)",
+        "live_site_cd_hint": "KCP에서 발급받은 라이브 사이트 코드 (SR prefix 제외하고 입력)",
+        "live_site_cd_example": "예: xxxxxx → 실제 사용 site_cd는 SRxxxxxx",
+        "live_site_key": "라이브 사이트 키 (site_key)",
+        "live_site_key_hint": "외부에 노출되지 않도록 주의하세요.",
+        "section_redirect": "리다이렉트 URL",
+        "redirect_success_url": "결제 성공 리다이렉트 URL",
+        "redirect_success_url_hint": "상대 경로(/shop/...) 또는 전체 URL 모두 가능합니다. {orderId}는 주문번호로 자동 치환됩니다.",
+        "redirect_fail_url": "결제 실패 리다이렉트 URL",
+        "redirect_fail_url_hint": "상대 경로 또는 전체 URL 모두 가능합니다. 오류 정보는 쿼리 파라미터로 자동 추가됩니다.",
+        "section_vbank_notify": "가상계좌 입금통보 URL",
+        "vbank_notify_hint": "NHN KCP 가맹점 어드민에서 이 URL을 입금통보 URL로 등록해야 가상계좌 결제가 자동으로 처리됩니다.",
+        "vbank_notify_copied": "URL이 클립보드에 복사되었습니다.",
+        "copy": "복사"
+    }
+}

@@ -1,0 +1,166 @@
+{
+    "target_layout": "admin_ecommerce_order_detail",
+    "data_sources": [
+        {
+            "id": "kcp_status",
+            "type": "api",
+            "endpoint": "/api/plugins/sirsoft-pay_nhnkcp/admin/orders/{{route.orderNumber}}/transaction-status",
+            "method": "GET",
+            "auto_fetch": true,
+            "auth_required": true
+        }
+    ],
+    "injections": [
+        {
+            "target_id": "sticky_header_container",
+            "position": "append_child",
+            "components": [
+                {
+                    "type": "basic",
+                    "name": "Div",
+                    "if": "{{kcp_status.data?._is_test_mode === true}}",
+                    "props": { "className": "mx-6 mb-3 px-3 py-2 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg flex items-center gap-2" },
+                    "children": [
+                        {
+                            "type": "basic",
+                            "name": "Icon",
+                            "props": { "name": "flask-conical", "className": "w-4 h-4 text-orange-600 dark:text-orange-400 flex-shrink-0" }
+                        },
+                        {
+                            "type": "basic",
+                            "name": "Span",
+                            "props": { "className": "text-sm font-semibold text-orange-800 dark:text-orange-300" },
+                            "text": "$t:sirsoft-pay_nhnkcp.admin.test_mode_badge"
+                        },
+                        {
+                            "type": "basic",
+                            "name": "Span",
+                            "props": { "className": "text-sm text-orange-700 dark:text-orange-400" },
+                            "text": "$t:sirsoft-pay_nhnkcp.admin.test_mode_order_notice"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "target_id": "tab_content_area",
+            "position": "append_child",
+            "components": [
+                {
+                    "id": "kcp_info_panel",
+                    "type": "basic",
+                    "name": "Div",
+                    "if": "{{!!kcp_status.data?.tno}}",
+                    "props": { "className": "card" },
+                    "children": [
+                        {
+                            "type": "basic",
+                            "name": "Div",
+                            "props": { "className": "flex items-center gap-2 mb-4" },
+                            "children": [
+                                {
+                                    "type": "basic",
+                                    "name": "Div",
+                                    "props": { "className": "w-1.5 h-4 bg-blue-500 rounded-full flex-shrink-0" }
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "H3",
+                                    "props": { "className": "text-sm font-semibold text-gray-800 dark:text-gray-200" },
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.order_info_title"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "props": { "className": "text-xs text-gray-400 dark:text-gray-500 hidden sm:inline" },
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.order_info_description"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "if": "{{kcp_status.data?.res_cd === '0000'}}",
+                                    "props": { "className": "ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300" },
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.pay_status_approved"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "if": "{{kcp_status.data?.res_cd !== '0000'}}",
+                                    "props": { "className": "ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300" },
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.pay_status_unknown"
+                                }
+                            ]
+                        },
+                        {
+                            "type": "basic",
+                            "name": "Div",
+                            "props": { "className": "grid grid-cols-2 gap-x-4 gap-y-2 text-xs" },
+                            "children": [
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "props": { "className": "text-gray-500 dark:text-gray-400" },
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.result_tno"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "props": { "className": "font-mono text-gray-900 dark:text-gray-100 break-all" },
+                                    "text": "{{kcp_status.data?.tno ?? '-'}}"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "props": { "className": "text-gray-500 dark:text-gray-400" },
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.result_app_no"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "props": { "className": "font-mono text-gray-900 dark:text-gray-100" },
+                                    "text": "{{kcp_status.data?.app_no ?? '-'}}"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "props": { "className": "text-gray-500 dark:text-gray-400" },
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.result_app_time"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "props": { "className": "font-mono text-gray-900 dark:text-gray-100" },
+                                    "text": "{{kcp_status.data?.app_time ?? '-'}}"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "props": { "className": "text-gray-500 dark:text-gray-400" },
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.result_pay_method"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "props": { "className": "text-gray-900 dark:text-gray-100" },
+                                    "text": "{{kcp_status.data?.card_name ?? kcp_status.data?.bank_name ?? kcp_status.data?.use_pay_method ?? '-'}}"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "props": { "className": "text-gray-500 dark:text-gray-400" },
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.result_res_cd"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "props": { "className": "font-mono text-gray-900 dark:text-gray-100" },
+                                    "text": "{{kcp_status.data?.res_cd ?? '-'}}"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
