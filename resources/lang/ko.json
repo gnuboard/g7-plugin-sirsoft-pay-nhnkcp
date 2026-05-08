@@ -60,6 +60,19 @@
         "live_site_cd_example": "예: xxxxxx → 실제 사용 site_cd는 SRxxxxxx",
         "live_site_key": "라이브 사이트 키 (site_key)",
         "live_site_key_hint": "외부에 노출되지 않도록 주의하세요.",
+        "section_easy_pay": "간편결제 설정",
+        "section_easy_pay_hint": "사용할 간편결제 서비스를 선택하세요. KCP 가맹점 계약이 완료된 서비스만 활성화하세요.",
+        "easy_pay_allow_with_other_pg": "타 PG와 사용가능함",
+        "easy_pay_allow_with_other_pg_hint": "활성화하면, 다른 PG사가 기본 결제수단으로 설정된 경우에도 체크아웃 페이지에 NHN KCP 간편결제 버튼이 표시됩니다.",
+        "easy_pay_payco": "PAYCO (페이코)",
+        "easy_pay_naverpay": "네이버페이",
+        "easy_pay_naverpay_hint": "테스트 모드에서 결제 불가",
+        "easy_pay_naverpay_point": "네이버페이 포인트결제",
+        "easy_pay_naverpay_point_hint": "KCP 가맹점에서 네이버페이 포인트결제 계약이 필요합니다. [DR02] 오류 발생 시 비활성화 후 KCP에 문의하세요.",
+        "easy_pay_kakaopay": "카카오페이",
+        "easy_pay_kakaopay_hint": "테스트 모드에서 결제 불가",
+        "easy_pay_applepay": "애플페이",
+        "easy_pay_applepay_hint": "iOS Safari에서만 사용 가능",
         "section_redirect": "리다이렉트 URL",
         "redirect_success_url": "결제 성공 리다이렉트 URL",
         "redirect_success_url_hint": "상대 경로(/shop/...) 또는 전체 URL 모두 가능합니다. {orderId}는 주문번호로 자동 치환됩니다.",
@@ -69,5 +82,8 @@
         "vbank_notify_hint": "NHN KCP 가맹점 어드민에서 이 URL을 입금통보 URL로 등록해야 가상계좌 결제가 자동으로 처리됩니다.",
         "vbank_notify_copied": "URL이 클립보드에 복사되었습니다.",
         "copy": "복사"
+    },
+    "easy_pay": {
+        "section_title": "간편결제"
     }
 }

@@ -13,10 +13,12 @@ interface PgPaymentData {
 
 interface RequestPaymentParams {
     pgPaymentData: PgPaymentData;
+    paymentMethod?: string;
 }
 
 interface ClientConfig {
     client_id: string;
+    easy_pay_client_id?: string;
     sdk_url: string;
     callback_urls: {
         callback: string;
@@ -32,16 +34,25 @@ class KcpCancelledError extends Error {
 }
 
 // KCP pay_method 비트마스크 변환 (payplus_web.jsp 규격)
-// G7 결제수단명 → KCP 비트마스크
 const KCP_PAY_METHOD: Record<string, string> = {
     card:            '100000000000', // 신용카드
     bank_transfer:   '010000000000', // 계좌이체
     virtual_account: '001000000000', // 가상계좌
     mobile:          '000010000000', // 휴대폰결제
-    // 내부 별칭
     bank:            '010000000000',
     vbank:           '001000000000',
     phone:           '000010000000',
+};
+
+// KCP 간편결제 direct 파라미터 (payplus_web.jsp 규격)
+// 간편결제는 pay_method="100000000000"(카드)로 고정하고, 결제수단은 direct 파라미터로 지정한다.
+// 네이버페이 포인트: naverpay_direct + naverpay_point_direct 둘 다 필요
+const KCP_EASY_PAY_DIRECT: Record<string, Record<string, string>> = {
+    nhnkcp_payco:          { payco_direct: 'Y' },
+    nhnkcp_naverpay:       { naverpay_direct: 'Y' },
+    nhnkcp_naverpay_point: { naverpay_direct: 'Y', naverpay_point_direct: 'Y' },
+    nhnkcp_kakaopay:       { kakaopay_direct: 'A' },
+    nhnkcp_applepay:       { applepay_direct: 'Y' },
 };
 
 /**
@@ -61,12 +72,15 @@ const KCP_PAY_METHOD: Record<string, string> = {
  *      - 취소/오류: iframe+overlay 제거, 결제 상태 복원
  */
 export async function requestPaymentHandler(action: any, _context?: any): Promise<void> {
-    const { pgPaymentData } = (action.params || {}) as RequestPaymentParams;
+    const { pgPaymentData, paymentMethod: paramPaymentMethod } = (action.params || {}) as RequestPaymentParams;
 
     if (!pgPaymentData) {
         console.error('[sirsoft-pay_nhnkcp] pgPaymentData is required');
         return;
     }
+
+    const paymentMethod = paramPaymentMethod ?? pgPaymentData.pay_method ?? 'card';
+    const isEasyPay = typeof paymentMethod === 'string' && paymentMethod.startsWith('nhnkcp_');
 
     const G7Core = (window as any).G7Core;
 
@@ -81,10 +95,17 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
 
         const config: ClientConfig = configJson.data;
         const callbackUrl = window.location.origin + config.callback_urls.callback;
-        const payMethod = KCP_PAY_METHOD[pgPaymentData.pay_method ?? 'card'] ?? '100000000000';
+
+        // 간편결제는 pay_method 항상 "100000000000" (카드 비트마스크), direct 파라미터로 수단 지정
+        const payMethod = isEasyPay
+            ? '100000000000'
+            : (KCP_PAY_METHOD[pgPaymentData.pay_method ?? 'card'] ?? '100000000000');
+
+        // 간편결제는 테스트용 별도 site_cd(S6729) 사용 (레거시 settle_kcp.inc.php 동일 패턴)
+        const siteCd = isEasyPay ? (config.easy_pay_client_id ?? config.client_id) : config.client_id;
 
         const fields: Record<string, string> = {
-            site_cd: config.client_id,
+            site_cd: siteCd,
             ordr_idxx: pgPaymentData.order_number,
             good_name: pgPaymentData.order_name,
             good_mny: String(pgPaymentData.amount),
@@ -94,6 +115,14 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
             pay_method: payMethod,
             Ret_URL: callbackUrl,
         };
+
+        // 간편결제 종류별 direct 파라미터 추가
+        if (isEasyPay) {
+            const directFields = KCP_EASY_PAY_DIRECT[paymentMethod];
+            if (directFields) {
+                Object.assign(fields, directFields);
+            }
+        }
 
         const hiddenInputs = Object.entries(fields)
             .map(([n, v]) => `<input type="hidden" name="${n}" value="${v.replace(/"/g, '&quot;')}">`)
@@ -182,14 +211,13 @@ try {
 
     } catch (error: unknown) {
         if (error instanceof KcpCancelledError) {
-            // 사용자가 결제 취소 → 에러 모달 없이 조용히 상태 복원
-            G7Core?.state?.setLocal?.({ isSubmittingOrder: false, paymentMethod: pgPaymentData.pay_method ?? 'card' });
+            G7Core?.state?.setLocal?.({ isSubmittingOrder: false, paymentMethod });
             return;
         }
 
         console.error('[sirsoft-pay_nhnkcp] requestPayment error', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        G7Core?.state?.setLocal?.({ paymentErrorMessage: errorMessage, isSubmittingOrder: false, paymentMethod: pgPaymentData.pay_method ?? 'card' });
+        G7Core?.state?.setLocal?.({ paymentErrorMessage: errorMessage, isSubmittingOrder: false, paymentMethod });
         G7Core?.modal?.open?.('nhnkcp_payment_error_modal');
     }
 }

@@ -226,150 +226,6 @@
                         ]
                     },
                     {
-                        "id": "test_keys_section",
-                        "type": "basic",
-                        "name": "Div",
-                        "props": {
-                            "className": "mt-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700"
-                        },
-                        "children": [
-                            {
-                                "type": "basic",
-                                "name": "Div",
-                                "props": {
-                                    "className": "px-6 py-4 border-b border-gray-200 dark:border-gray-700"
-                                },
-                                "children": [
-                                    {
-                                        "type": "basic",
-                                        "name": "H3",
-                                        "props": {
-                                            "className": "text-base font-semibold text-gray-900 dark:text-white"
-                                        },
-                                        "text": "$t:sirsoft-pay_nhnkcp.settings.section_test_keys"
-                                    }
-                                ]
-                            },
-                            {
-                                "type": "basic",
-                                "name": "Div",
-                                "props": {
-                                    "className": "p-6 space-y-6"
-                                },
-                                "children": [
-                                    {
-                                        "id": "field_test_site_cd",
-                                        "type": "basic",
-                                        "name": "Div",
-                                        "props": {
-                                            "className": "grid grid-cols-1 lg:grid-cols-3 gap-4 items-start"
-                                        },
-                                        "children": [
-                                            {
-                                                "type": "basic",
-                                                "name": "Div",
-                                                "props": {
-                                                    "className": "lg:col-span-1"
-                                                },
-                                                "children": [
-                                                    {
-                                                        "type": "basic",
-                                                        "name": "Label",
-                                                        "props": {
-                                                            "className": "block text-sm font-medium text-gray-700 dark:text-gray-300"
-                                                        },
-                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.test_site_cd"
-                                                    },
-                                                    {
-                                                        "type": "basic",
-                                                        "name": "P",
-                                                        "props": {
-                                                            "className": "mt-1 text-xs text-gray-500 dark:text-gray-400"
-                                                        },
-                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.test_site_cd_hint"
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                "type": "basic",
-                                                "name": "Div",
-                                                "props": {
-                                                    "className": "lg:col-span-2"
-                                                },
-                                                "children": [
-                                                    {
-                                                        "type": "basic",
-                                                        "name": "Input",
-                                                        "props": {
-                                                            "type": "text",
-                                                            "name": "test_site_cd",
-                                                            "placeholder": "T0000",
-                                                            "className": "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent font-mono text-sm"
-                                                        }
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "id": "field_test_site_key",
-                                        "type": "basic",
-                                        "name": "Div",
-                                        "props": {
-                                            "className": "grid grid-cols-1 lg:grid-cols-3 gap-4 items-start"
-                                        },
-                                        "children": [
-                                            {
-                                                "type": "basic",
-                                                "name": "Div",
-                                                "props": {
-                                                    "className": "lg:col-span-1"
-                                                },
-                                                "children": [
-                                                    {
-                                                        "type": "basic",
-                                                        "name": "Label",
-                                                        "props": {
-                                                            "className": "block text-sm font-medium text-gray-700 dark:text-gray-300"
-                                                        },
-                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.test_site_key"
-                                                    },
-                                                    {
-                                                        "type": "basic",
-                                                        "name": "P",
-                                                        "props": {
-                                                            "className": "mt-1 text-xs text-gray-500 dark:text-gray-400"
-                                                        },
-                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.test_site_key_hint"
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                "type": "basic",
-                                                "name": "Div",
-                                                "props": {
-                                                    "className": "lg:col-span-2"
-                                                },
-                                                "children": [
-                                                    {
-                                                        "type": "basic",
-                                                        "name": "Input",
-                                                        "props": {
-                                                            "type": "password",
-                                                            "name": "test_site_key",
-                                                            "placeholder": "••••••••••••••••",
-                                                            "className": "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent font-mono text-sm"
-                                                        }
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
                         "id": "live_keys_section",
                         "type": "basic",
                         "name": "Div",
@@ -531,6 +387,264 @@
                                                         }
                                                     }
                                                 ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "easy_pay_section",
+                        "type": "basic",
+                        "name": "Div",
+                        "props": {
+                            "className": "mt-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700"
+                        },
+                        "children": [
+                            {
+                                "type": "basic",
+                                "name": "Div",
+                                "props": {
+                                    "className": "px-6 py-4 border-b border-gray-200 dark:border-gray-700"
+                                },
+                                "children": [
+                                    {
+                                        "type": "basic",
+                                        "name": "H3",
+                                        "props": {
+                                            "className": "text-base font-semibold text-gray-900 dark:text-white"
+                                        },
+                                        "text": "$t:sirsoft-pay_nhnkcp.settings.section_easy_pay"
+                                    },
+                                    {
+                                        "type": "basic",
+                                        "name": "P",
+                                        "props": {
+                                            "className": "mt-1 text-xs text-gray-500 dark:text-gray-400"
+                                        },
+                                        "text": "$t:sirsoft-pay_nhnkcp.settings.section_easy_pay_hint"
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "basic",
+                                "name": "Div",
+                                "props": {
+                                    "className": "divide-y divide-gray-100 dark:divide-gray-700"
+                                },
+                                "children": [
+                                    {
+                                        "type": "basic",
+                                        "name": "Div",
+                                        "props": {
+                                            "className": "flex items-center justify-between px-6 py-4 bg-blue-50 dark:bg-blue-900/20"
+                                        },
+                                        "children": [
+                                            {
+                                                "type": "basic",
+                                                "name": "Div",
+                                                "children": [
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "Label",
+                                                        "props": {
+                                                            "className": "block text-sm font-medium text-gray-700 dark:text-gray-300"
+                                                        },
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.easy_pay_allow_with_other_pg"
+                                                    },
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "P",
+                                                        "props": {
+                                                            "className": "mt-1 text-xs text-gray-500 dark:text-gray-400"
+                                                        },
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.easy_pay_allow_with_other_pg_hint"
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "type": "composite",
+                                                "name": "Toggle",
+                                                "props": {
+                                                    "name": "easy_pay_allow_with_other_pg"
+                                                }
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "type": "basic",
+                                        "name": "Div",
+                                        "props": {
+                                            "className": "flex items-center justify-between px-6 py-4"
+                                        },
+                                        "children": [
+                                            {
+                                                "type": "basic",
+                                                "name": "Label",
+                                                "props": {
+                                                    "className": "block text-sm font-medium text-gray-700 dark:text-gray-300"
+                                                },
+                                                "text": "$t:sirsoft-pay_nhnkcp.settings.easy_pay_payco"
+                                            },
+                                            {
+                                                "type": "composite",
+                                                "name": "Toggle",
+                                                "props": {
+                                                    "name": "easy_pay_payco"
+                                                }
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "type": "basic",
+                                        "name": "Div",
+                                        "props": {
+                                            "className": "flex items-start justify-between px-6 py-4"
+                                        },
+                                        "children": [
+                                            {
+                                                "type": "basic",
+                                                "name": "Div",
+                                                "children": [
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "Label",
+                                                        "props": {
+                                                            "className": "block text-sm font-medium text-gray-700 dark:text-gray-300"
+                                                        },
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.easy_pay_naverpay"
+                                                    },
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "P",
+                                                        "props": {
+                                                            "className": "mt-1 text-xs text-amber-600 dark:text-amber-400"
+                                                        },
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.easy_pay_naverpay_hint"
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "type": "composite",
+                                                "name": "Toggle",
+                                                "props": {
+                                                    "name": "easy_pay_naverpay"
+                                                }
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "type": "basic",
+                                        "name": "Div",
+                                        "props": {
+                                            "className": "flex items-start justify-between px-6 py-4"
+                                        },
+                                        "children": [
+                                            {
+                                                "type": "basic",
+                                                "name": "Div",
+                                                "children": [
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "Label",
+                                                        "props": {
+                                                            "className": "block text-sm font-medium text-gray-700 dark:text-gray-300"
+                                                        },
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.easy_pay_naverpay_point"
+                                                    },
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "P",
+                                                        "props": {
+                                                            "className": "mt-1 text-xs text-amber-600 dark:text-amber-400"
+                                                        },
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.easy_pay_naverpay_point_hint"
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "type": "composite",
+                                                "name": "Toggle",
+                                                "props": {
+                                                    "name": "easy_pay_naverpay_point"
+                                                }
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "type": "basic",
+                                        "name": "Div",
+                                        "props": {
+                                            "className": "flex items-start justify-between px-6 py-4"
+                                        },
+                                        "children": [
+                                            {
+                                                "type": "basic",
+                                                "name": "Div",
+                                                "children": [
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "Label",
+                                                        "props": {
+                                                            "className": "block text-sm font-medium text-gray-700 dark:text-gray-300"
+                                                        },
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.easy_pay_kakaopay"
+                                                    },
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "P",
+                                                        "props": {
+                                                            "className": "mt-1 text-xs text-amber-600 dark:text-amber-400"
+                                                        },
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.easy_pay_kakaopay_hint"
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "type": "composite",
+                                                "name": "Toggle",
+                                                "props": {
+                                                    "name": "easy_pay_kakaopay"
+                                                }
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "type": "basic",
+                                        "name": "Div",
+                                        "props": {
+                                            "className": "flex items-start justify-between px-6 py-4"
+                                        },
+                                        "children": [
+                                            {
+                                                "type": "basic",
+                                                "name": "Div",
+                                                "children": [
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "Label",
+                                                        "props": {
+                                                            "className": "block text-sm font-medium text-gray-700 dark:text-gray-300"
+                                                        },
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.easy_pay_applepay"
+                                                    },
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "P",
+                                                        "props": {
+                                                            "className": "mt-1 text-xs text-gray-500 dark:text-gray-400"
+                                                        },
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.easy_pay_applepay_hint"
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "type": "composite",
+                                                "name": "Toggle",
+                                                "props": {
+                                                    "name": "easy_pay_applepay"
+                                                }
                                             }
                                         ]
                                     }

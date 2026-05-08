@@ -92,13 +92,48 @@ class RegisterPgProviderListener implements HookListenerInterface
             ? 'https://testpay.kcp.co.kr/plugin/payplus_web.jsp'
             : 'https://pay.kcp.co.kr/plugin/payplus_web.jsp';
 
+        $easyPayKeys = [
+            'PAYCO'         => 'easy_pay_payco',
+            'NAVERPAY'      => 'easy_pay_naverpay',
+            'NAVERPAY POINT' => 'easy_pay_naverpay_point',
+            'KAKAOPAY'      => 'easy_pay_kakaopay',
+            'APPLEPAY'      => 'easy_pay_applepay',
+        ];
+        $enabledEasyPays = array_values(array_keys(array_filter($easyPayKeys, fn ($key) => (bool) ($settings[$key] ?? false))));
+
+        // "타 PG와 사용가능함"이 꺼져 있고 현재 기본 PG가 nhnkcp가 아니면 간편결제 숨김
+        $allowWithOtherPg = (bool) ($settings['easy_pay_allow_with_other_pg'] ?? false);
+        if (! $allowWithOtherPg && ! $this->isNhnKcpDefaultPg()) {
+            $enabledEasyPays = [];
+        }
+
+        // 간편결제 테스트 site_cd: 레거시 코드와 동일하게 S6729 사용
+        // T0000(표준 테스트)은 간편결제 미지원 → [3101] 오류
+        $easyPayTestSiteCd = $settings['easy_pay_test_site_cd'] ?? 'S6729';
+        $easyPayClientId = $isTest ? $easyPayTestSiteCd : $liveSiteCd;
+
         return array_merge($config, [
             'client_id' => $siteCd,
+            'easy_pay_client_id' => $easyPayClientId,
             'sdk_url' => $sdkUrl,
             'callback_urls' => [
                 'callback' => '/plugins/sirsoft-pay_nhnkcp/payment/callback',
             ],
+            'enabled_easy_pays' => $enabledEasyPays,
         ]);
+    }
+
+    private function isNhnKcpDefaultPg(): bool
+    {
+        $path = storage_path('app/modules/sirsoft-ecommerce/settings/order_settings.json');
+
+        if (! file_exists($path)) {
+            return false;
+        }
+
+        $data = json_decode(file_get_contents($path), true);
+
+        return ($data['default_pg_provider'] ?? '') === 'nhnkcp';
     }
 
     private function getPluginSettings(): array

@@ -8,8 +8,10 @@
  * 코어/템플릿 수정 없이 이 문제를 우회하기 위해 plugin loading 시점에
  * window.fetch 를 래핑해 다음을 수행:
  *
- *   1. POST /api/modules/sirsoft-ecommerce/user/orders 응답을 가로챈다
- *   2. data.pg_provider === 'sirsoft-nhnkcp' 이면 requestPayment 핸들러를 직접 호출하여 결제창 띄움
+ *   1. POST /api/modules/sirsoft-ecommerce/user/orders 요청 body에서
+ *      nhnkcp_* 간편결제 수단을 'card'로 교체 후 서버 전송
+ *   2. 응답에서 data.pg_provider === 'sirsoft-nhnkcp' 이면
+ *      requestPayment 핸들러를 직접 호출하여 결제창 띄움
  *   3. data.redirect_url 을 현재 URL로 교체하고 requires_pg_payment를 false로 변경
  *      → 템플릿 fallback 분기의 navigate 가 navigate-to-self 가 되어 실질적 이동 없음
  *
@@ -21,6 +23,7 @@ import { requestPaymentHandler } from './handlers/requestPayment';
 const ORDER_CREATE_PATH = '/api/modules/sirsoft-ecommerce/user/orders';
 const TARGET_PG_PROVIDER = 'sirsoft-nhnkcp';
 const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
+const EASY_PAY_PREFIX = 'nhnkcp_';
 
 const logger = {
     info: (...args: unknown[]) => console.info(`[${PLUGIN_IDENTIFIER}]`, ...args),
@@ -72,6 +75,25 @@ function mutateResponse(originalResponse: Response, mutatedBody: OrderCreateResp
     });
 }
 
+function extractPaymentMethodFromBody(body: string): string | undefined {
+    try {
+        const parsed = JSON.parse(body) as Record<string, unknown>;
+        return parsed['payment_method'] as string | undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+function replacePaymentMethodInBody(body: string, replacement: string): string {
+    try {
+        const parsed = JSON.parse(body) as Record<string, unknown>;
+        parsed['payment_method'] = replacement;
+        return JSON.stringify(parsed);
+    } catch {
+        return body;
+    }
+}
+
 export function installOrderResponseInterceptor(): void {
     if (typeof window === 'undefined' || typeof window.fetch !== 'function') {
         return;
@@ -96,26 +118,29 @@ export function installOrderResponseInterceptor(): void {
         input: RequestInfo | URL,
         init?: RequestInit
     ): Promise<Response> {
-        // 요청 body에서 payment_method 미리 추출 (body는 한 번만 읽을 수 있음)
-        let requestPaymentMethod: string | undefined;
-        try {
-            const bodyStr = typeof init?.body === 'string' ? init.body : null;
-            if (bodyStr) {
-                const parsed = JSON.parse(bodyStr) as Record<string, unknown>;
-                requestPaymentMethod = parsed['payment_method'] as string | undefined;
-            }
-        } catch {
-            // non-JSON body는 무시
-        }
-
-        const response = await originalFetch(input, init);
-
         const url = extractUrl(input);
         const method = extractMethod(input, init);
 
+        // 주문 생성 엔드포인트가 아니면 바로 통과
         if (!isTargetEndpoint(url, method)) {
-            return response;
+            return originalFetch(input, init);
         }
+
+        // 요청 body에서 payment_method 추출 (nhnkcp_* 간편결제 감지)
+        let originalPaymentMethod: string | undefined;
+        let modifiedInit = init;
+
+        if (init?.body && typeof init.body === 'string') {
+            const pm = extractPaymentMethodFromBody(init.body);
+            if (typeof pm === 'string' && pm.startsWith(EASY_PAY_PREFIX)) {
+                originalPaymentMethod = pm;
+                // nhnkcp_* → 'card'로 교체해 서버 전송 (서버 ValidationEnum에 없는 값 방지)
+                modifiedInit = { ...init, body: replacePaymentMethodInBody(init.body, 'card') };
+                logger.info(`easy pay detected: replacing payment_method '${pm}' → 'card'`);
+            }
+        }
+
+        const response = await originalFetch(input, modifiedInit);
 
         let cloned: Response;
         try {
@@ -149,14 +174,20 @@ export function installOrderResponseInterceptor(): void {
 
         logger.info('intercepted order create response — opening PG popup');
 
-        // 요청 body의 payment_method를 pgPaymentData에 주입 (buildPgPaymentData는 미포함)
-        const enrichedPgPaymentData = requestPaymentMethod
-            ? { ...pgPaymentData, pay_method: requestPaymentMethod }
+        // 간편결제가 아닌 경우 요청 body의 pay_method를 pgPaymentData에 주입
+        const enrichedPgPaymentData = (!originalPaymentMethod && modifiedInit?.body && typeof modifiedInit.body === 'string')
+            ? (() => {
+                const pm = extractPaymentMethodFromBody(modifiedInit!.body as string);
+                return pm ? { ...pgPaymentData, pay_method: pm } : pgPaymentData;
+            })()
             : pgPaymentData;
 
         void requestPaymentHandler({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            params: { pgPaymentData: enrichedPgPaymentData as any },
+            params: {
+                pgPaymentData: enrichedPgPaymentData as any,
+                paymentMethod: originalPaymentMethod,
+            },
         });
 
         const mutatedBody: OrderCreateResponseBody = {

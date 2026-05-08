@@ -1,0 +1,226 @@
+{
+    "target_layout": "shop/checkout",
+    "data_sources": [
+        {
+            "id": "nhnkcp_easy_pay_config",
+            "type": "api",
+            "endpoint": "/api/modules/sirsoft-ecommerce/payments/client-config/nhnkcp",
+            "method": "GET",
+            "auto_fetch": true
+        }
+    ],
+    "modals": [
+        {
+            "id": "nhnkcp_payment_error_modal",
+            "type": "composite",
+            "name": "Modal",
+            "props": {
+                "title": "$t:sirsoft-pay_nhnkcp.payment_error.title",
+                "size": "small",
+                "showCloseButton": true
+            },
+            "children": [
+                {
+                    "type": "basic",
+                    "name": "Div",
+                    "props": {
+                        "className": "text-center py-4"
+                    },
+                    "children": [
+                        {
+                            "type": "basic",
+                            "name": "Icon",
+                            "props": {
+                                "name": "exclamation-circle",
+                                "className": "text-red-500 text-4xl mb-4"
+                            }
+                        },
+                        {
+                            "type": "basic",
+                            "name": "P",
+                            "props": {
+                                "className": "text-gray-700 dark:text-gray-300"
+                            },
+                            "text": "$t:sirsoft-pay_nhnkcp.payment_error.message"
+                        },
+                        {
+                            "type": "basic",
+                            "name": "P",
+                            "if": "{{_local.paymentErrorMessage}}",
+                            "props": {
+                                "className": "text-sm text-red-600 dark:text-red-400 mt-2"
+                            },
+                            "text": "{{_local.paymentErrorMessage}}"
+                        }
+                    ]
+                },
+                {
+                    "type": "basic",
+                    "name": "Div",
+                    "props": {
+                        "className": "flex justify-center mt-6"
+                    },
+                    "children": [
+                        {
+                            "type": "basic",
+                            "name": "Button",
+                            "props": {
+                                "type": "button",
+                                "className": "px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                            },
+                            "text": "$t:common.confirm",
+                            "actions": [
+                                {
+                                    "type": "click",
+                                    "handler": "sequence",
+                                    "actions": [
+                                        {
+                                            "handler": "setState",
+                                            "params": {
+                                                "target": "local",
+                                                "paymentErrorMessage": null
+                                            }
+                                        },
+                                        {
+                                            "handler": "closeModal"
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "injections": [
+        {
+            "target_id": "nicepay_checkout_payment_section",
+            "position": "append_child",
+            "components": [
+                {
+                    "comment": "NHN KCP 간편결제 섹션 - enabled_easy_pays 가 하나 이상인 경우에만 표시",
+                    "type": "basic",
+                    "name": "Div",
+                    "if": "{{(nhnkcp_easy_pay_config.data?.enabled_easy_pays ?? []).length > 0}}",
+                    "props": { "className": "mt-4 pt-4 border-t border-gray-200 dark:border-gray-700" },
+                    "responsive": {
+                        "portable": {
+                            "props": { "className": "mt-3 pt-3 border-t border-gray-200 dark:border-gray-700" }
+                        }
+                    },
+                    "children": [
+                        {
+                            "type": "basic",
+                            "name": "P",
+                            "props": { "className": "text-sm font-medium text-gray-700 dark:text-gray-300 mb-3" },
+                            "responsive": {
+                                "portable": {
+                                    "props": { "className": "text-sm font-medium text-gray-700 dark:text-gray-300 mb-2" }
+                                }
+                            },
+                            "text": "$t:sirsoft-pay_nhnkcp.easy_pay.section_title"
+                        },
+                        {
+                            "type": "basic",
+                            "name": "Div",
+                            "props": { "className": "nhnkcp-easy-pay-btns flex flex-wrap gap-2" },
+                            "children": [
+                                {
+                                    "comment": "PAYCO",
+                                    "type": "basic",
+                                    "name": "Button",
+                                    "if": "{{(nhnkcp_easy_pay_config.data?.enabled_easy_pays ?? []).includes('PAYCO')}}",
+                                    "props": {
+                                        "type": "button",
+                                        "className": "px-4 py-2 rounded-lg text-sm font-bold bg-red-500 text-white hover:opacity-90"
+                                    },
+                                    "text": "PAYCO",
+                                    "actions": [
+                                        {
+                                            "type": "click",
+                                            "handler": "sirsoft-pay_nhnkcp.setPaymentMethod",
+                                            "params": { "paymentMethod": "nhnkcp_payco" }
+                                        }
+                                    ]
+                                },
+                                {
+                                    "comment": "네이버페이",
+                                    "type": "basic",
+                                    "name": "Button",
+                                    "if": "{{(nhnkcp_easy_pay_config.data?.enabled_easy_pays ?? []).includes('NAVERPAY')}}",
+                                    "props": {
+                                        "type": "button",
+                                        "className": "px-4 py-2 rounded-lg text-sm font-bold bg-green-500 text-white hover:opacity-90"
+                                    },
+                                    "text": "네이버페이",
+                                    "actions": [
+                                        {
+                                            "type": "click",
+                                            "handler": "sirsoft-pay_nhnkcp.setPaymentMethod",
+                                            "params": { "paymentMethod": "nhnkcp_naverpay" }
+                                        }
+                                    ]
+                                },
+                                {
+                                    "comment": "네이버페이 포인트",
+                                    "type": "basic",
+                                    "name": "Button",
+                                    "if": "{{(nhnkcp_easy_pay_config.data?.enabled_easy_pays ?? []).includes('NAVERPAY POINT')}}",
+                                    "props": {
+                                        "type": "button",
+                                        "className": "px-4 py-2 rounded-lg text-sm font-bold bg-green-600 text-white hover:opacity-90"
+                                    },
+                                    "text": "네이버페이 포인트",
+                                    "actions": [
+                                        {
+                                            "type": "click",
+                                            "handler": "sirsoft-pay_nhnkcp.setPaymentMethod",
+                                            "params": { "paymentMethod": "nhnkcp_naverpay_point" }
+                                        }
+                                    ]
+                                },
+                                {
+                                    "comment": "카카오페이",
+                                    "type": "basic",
+                                    "name": "Button",
+                                    "if": "{{(nhnkcp_easy_pay_config.data?.enabled_easy_pays ?? []).includes('KAKAOPAY')}}",
+                                    "props": {
+                                        "type": "button",
+                                        "className": "px-4 py-2 rounded-lg text-sm font-bold bg-yellow-400 text-gray-900 hover:opacity-90"
+                                    },
+                                    "text": "카카오페이",
+                                    "actions": [
+                                        {
+                                            "type": "click",
+                                            "handler": "sirsoft-pay_nhnkcp.setPaymentMethod",
+                                            "params": { "paymentMethod": "nhnkcp_kakaopay" }
+                                        }
+                                    ]
+                                },
+                                {
+                                    "comment": "애플페이 (iOS Safari 전용)",
+                                    "type": "basic",
+                                    "name": "Button",
+                                    "if": "{{(nhnkcp_easy_pay_config.data?.enabled_easy_pays ?? []).includes('APPLEPAY')}}",
+                                    "props": {
+                                        "type": "button",
+                                        "className": "px-4 py-2 rounded-lg text-sm font-bold bg-gray-900 dark:bg-gray-950 text-white hover:opacity-90"
+                                    },
+                                    "text": "Apple Pay",
+                                    "actions": [
+                                        {
+                                            "type": "click",
+                                            "handler": "sirsoft-pay_nhnkcp.setPaymentMethod",
+                                            "params": { "paymentMethod": "nhnkcp_applepay" }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
