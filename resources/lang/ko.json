@@ -20,7 +20,13 @@
         "payment_type_label": "결제 수단",
         "receipt_label": "영수증",
         "receipt_view": "영수증 조회",
-        "cash_receipt_view": "현금영수증 조회"
+        "cash_receipt_view": "현금영수증 조회",
+        "vbank_title": "가상계좌 입금 안내",
+        "vbank_bank_name": "은행",
+        "vbank_account": "계좌번호",
+        "vbank_holder": "예금주",
+        "vbank_due": "입금 기한",
+        "vbank_notice": "입금 기한 내에 입금하지 않으시면 주문이 자동 취소됩니다."
     },
     "admin": {
         "test_mode_badge": "테스트 결제",

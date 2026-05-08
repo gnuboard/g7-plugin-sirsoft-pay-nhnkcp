@@ -20,7 +20,13 @@
         "payment_type_label": "Payment Method",
         "receipt_label": "Receipt",
         "receipt_view": "View Receipt",
-        "cash_receipt_view": "View Cash Receipt"
+        "cash_receipt_view": "View Cash Receipt",
+        "vbank_title": "Virtual Account Deposit Guide",
+        "vbank_bank_name": "Bank",
+        "vbank_account": "Account Number",
+        "vbank_holder": "Account Holder",
+        "vbank_due": "Deposit Deadline",
+        "vbank_notice": "Your order will be automatically cancelled if payment is not received by the deadline."
     },
     "admin": {
         "test_mode_badge": "Test Payment",
