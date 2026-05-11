@@ -41,7 +41,7 @@ class MobileApprovalController
         'nhnkcp_payco' => ['payco_direct' => 'Y'],
         'nhnkcp_naverpay' => ['naverpay_direct' => 'Y'],
         'nhnkcp_naverpay_point' => ['naverpay_direct' => 'Y', 'naverpay_point_direct' => 'Y'],
-        'nhnkcp_kakaopay' => ['kakaopay_direct' => 'A'],
+        'nhnkcp_kakaopay' => ['kakaopay_direct' => 'Y'],
         'nhnkcp_applepay' => ['applepay_direct' => 'Y'],
     ];
 
