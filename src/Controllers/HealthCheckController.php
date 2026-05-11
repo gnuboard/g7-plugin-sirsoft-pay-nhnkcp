@@ -107,12 +107,19 @@ class HealthCheckController
         $cliOk = ! $this->isErroneous($byId[$cliId] ?? null);
 
         $pubKeyOk = ! $this->isErroneous($byId['pub_key'] ?? null);
-
-        $pcReady = $execOk && $cliOk && $pubKeyOk;
-
         $soapOk = ! $this->isErroneous($byId['soap_extension'] ?? null);
         $wsdlOk = ! $this->isErroneous($byId['wsdl_file'] ?? null);
-        $mobileReady = $soapOk && $wsdlOk;
+
+        // PC 표준결제: CLI 바이너리로 enc_data 복호화 필수
+        $pcReady = $execOk && $cliOk && $pubKeyOk;
+
+        // 모바일 카드/일반결제: KCP 가 콜백에 enc_data 를 동봉 → 서버가 CLI 로 복호화 필요.
+        // SOAP 만으로는 부족. PC 와 동일한 CLI 요건 + 모바일 전용 SOAP/WSDL 모두 필요.
+        $mobileCardReady = $execOk && $cliOk && $pubKeyOk && $soapOk && $wsdlOk;
+
+        // 모바일 가상계좌 전용: KCP 가 평문 필드(bankname/account/depositor)로 콜백 → CLI 불필요.
+        // SOAP/WSDL 만 OK 여도 가상계좌는 동작 가능.
+        $mobileVbankOnlyReady = $soapOk && $wsdlOk;
 
         $errorCount = 0;
         $warningCount = 0;
@@ -128,7 +135,9 @@ class HealthCheckController
 
         return [
             'pc_payment_ready' => $pcReady,
-            'mobile_payment_ready' => $mobileReady,
+            // 'mobile_payment_ready' 는 카드/일반결제 기준(가장 흔한 케이스). 가상계좌는 별도 필드.
+            'mobile_payment_ready' => $mobileCardReady,
+            'mobile_vbank_only_ready' => $mobileVbankOnlyReady,
             'error_count' => $errorCount,
             'warning_count' => $warningCount,
             'fixed_count' => $fixedCount,
