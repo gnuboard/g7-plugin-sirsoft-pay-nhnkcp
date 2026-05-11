@@ -1083,26 +1083,78 @@
                                 "props": { "className": "p-6 space-y-4" },
                                 "children": [
                                     {
-                                        "type": "composite",
-                                        "name": "ToggleField",
-                                        "props": {
-                                            "label": "$t:sirsoft-pay_nhnkcp.settings.use_escrow",
-                                            "hint": "$t:sirsoft-pay_nhnkcp.settings.use_escrow_hint",
-                                            "value": "{{_local.form.use_escrow ?? false}}",
-                                            "onChange": { "target": "local.form.use_escrow" }
-                                        }
+                                        "type": "basic",
+                                        "name": "Div",
+                                        "props": { "className": "flex items-center justify-between" },
+                                        "children": [
+                                            {
+                                                "type": "basic",
+                                                "name": "Div",
+                                                "children": [
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "Label",
+                                                        "props": { "className": "block text-sm font-medium text-gray-700 dark:text-gray-300" },
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.use_escrow"
+                                                    },
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "P",
+                                                        "props": { "className": "mt-1 text-xs text-gray-500 dark:text-gray-400" },
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.use_escrow_hint"
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "type": "composite",
+                                                "name": "Toggle",
+                                                "props": { "name": "use_escrow" }
+                                            }
+                                        ]
                                     },
                                     {
-                                        "type": "composite",
-                                        "name": "TextField",
+                                        "type": "basic",
+                                        "name": "Div",
                                         "if": "{{_local.form.use_escrow && _local.form.is_test_mode}}",
-                                        "props": {
-                                            "label": "$t:sirsoft-pay_nhnkcp.settings.escrow_test_site_cd",
-                                            "hint": "$t:sirsoft-pay_nhnkcp.settings.escrow_test_site_cd_hint",
-                                            "value": "{{_local.form.escrow_test_site_cd ?? 'T0007'}}",
-                                            "placeholder": "T0007",
-                                            "onChange": { "target": "local.form.escrow_test_site_cd" }
-                                        }
+                                        "props": { "className": "grid grid-cols-1 lg:grid-cols-3 gap-4 items-start" },
+                                        "children": [
+                                            {
+                                                "type": "basic",
+                                                "name": "Div",
+                                                "props": { "className": "lg:col-span-1" },
+                                                "children": [
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "Label",
+                                                        "props": { "className": "block text-sm font-medium text-gray-700 dark:text-gray-300" },
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.escrow_test_site_cd"
+                                                    },
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "P",
+                                                        "props": { "className": "mt-1 text-xs text-gray-500 dark:text-gray-400" },
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.escrow_test_site_cd_hint"
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "type": "basic",
+                                                "name": "Div",
+                                                "props": { "className": "lg:col-span-2" },
+                                                "children": [
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "Input",
+                                                        "props": {
+                                                            "type": "text",
+                                                            "name": "escrow_test_site_cd",
+                                                            "placeholder": "T0007",
+                                                            "className": "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent text-sm"
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        ]
                                     }
                                 ]
                             }
