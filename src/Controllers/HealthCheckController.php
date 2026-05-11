@@ -169,7 +169,7 @@ class HealthCheckController
     }
 
     /**
-     * bin 디렉토리 존재 + 쓰기 가능 여부 (chmod 자동 복구 사전조건)
+     * bin 디렉토리 존재 여부만 검사 — 쓰기 권한은 CLI 바이너리 단위로 처리
      */
     private function checkBinDirectory(): array
     {
@@ -180,28 +180,16 @@ class HealthCheckController
                 'label' => 'CLI 바이너리 디렉토리',
                 'status' => self::STATUS_ERROR,
                 'detail' => "bin 디렉토리가 없습니다: {$this->binDir}",
-                'remediation' => '플러그인을 재설치하거나, KCP 에서 제공한 CLI 바이너리 (pp_cli, pp_cli_x64, pub.key) 를 bin/ 에 복사하세요.',
+                'remediation' => '플러그인을 재설치하거나, KCP 에서 제공한 CLI 바이너리를 bin/ 에 복사하세요.',
             ];
         }
-
-        $writable = is_writable($this->binDir);
 
         return [
             'id' => 'bin_directory',
             'category' => 'pc',
             'label' => 'CLI 바이너리 디렉토리',
-            'status' => $writable ? self::STATUS_OK : self::STATUS_WARNING,
-            'detail' => $writable
-                ? '자동 chmod 가능'
-                : '쓰기 권한 없음 — 실행 권한 자동 복구 불가',
-            'remediation' => $writable
-                ? null
-                : "웹 프로세스가 bin/ 디렉토리에 쓸 수 있어야 자동 chmod 복구가 동작합니다.\n\n"
-                . "▶ 간단 (개발/테스트):\n"
-                . "  sudo chmod -R 0777 {$this->binDir}\n\n"
-                . "▶ 권장 (운영):\n"
-                . "  sudo chown -R thisgun:www-data {$this->binDir} && sudo chmod -R 0775 {$this->binDir}\n\n"
-                . "둘 다 동일하게 동작합니다. 운영 환경에서는 후자 권장.",
+            'status' => self::STATUS_OK,
+            'detail' => '디렉토리 존재',
         ];
     }
 
@@ -265,9 +253,7 @@ class HealthCheckController
             'label' => $label,
             'status' => self::STATUS_ERROR,
             'detail' => "실행 권한 없음 ({$beforeMode}) — 자동 복구 실패",
-            'remediation' => "터미널에서 실행 권한을 부여하세요. 아래 중 하나만 실행하면 됩니다:\n\n"
-                . "▶ 간단:\n  sudo chmod +x {$path}\n\n"
-                . "▶ 전체 디렉토리 일괄 (자동 복구도 가능해짐):\n  sudo chmod -R 0777 {$this->binDir}",
+            'remediation' => "터미널에서 이 파일에만 실행 권한을 부여하세요:\n  sudo chmod +x {$path}",
         ];
     }
 
