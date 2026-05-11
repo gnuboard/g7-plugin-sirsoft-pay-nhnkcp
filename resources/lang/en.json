@@ -26,7 +26,11 @@
         "vbank_account": "Account Number",
         "vbank_holder": "Account Holder",
         "vbank_due": "Deposit Deadline",
-        "vbank_notice": "Your order will be automatically cancelled if payment is not received by the deadline."
+        "vbank_notice": "Your order will be automatically cancelled if payment is not received by the deadline.",
+        "tax_breakdown_title": "Tax Breakdown",
+        "supply_amount": "Supply Amount",
+        "vat_amount": "VAT",
+        "tax_free_amount": "Tax-Free Amount"
     },
     "admin": {
         "test_mode_badge": "Test Payment",
