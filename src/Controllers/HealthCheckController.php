@@ -169,7 +169,12 @@ class HealthCheckController
                 : '쓰기 권한 없음 — 실행 권한 자동 복구 불가',
             'remediation' => $writable
                 ? null
-                : "웹 프로세스(www-data)에게 bin/ 쓰기 권한을 부여하세요:\nsudo chgrp -R www-data {$this->binDir} && sudo chmod -R g+rwX {$this->binDir}",
+                : "웹 프로세스가 bin/ 디렉토리에 쓸 수 있어야 자동 chmod 복구가 동작합니다.\n\n"
+                . "▶ 간단 (개발/테스트):\n"
+                . "  sudo chmod -R 0777 {$this->binDir}\n\n"
+                . "▶ 권장 (운영):\n"
+                . "  sudo chown -R thisgun:www-data {$this->binDir} && sudo chmod -R 0775 {$this->binDir}\n\n"
+                . "둘 다 동일하게 동작합니다. 운영 환경에서는 후자 권장.",
         ];
     }
 
@@ -233,7 +238,9 @@ class HealthCheckController
             'label' => $label,
             'status' => self::STATUS_ERROR,
             'detail' => "실행 권한 없음 ({$beforeMode}) — 자동 복구 실패",
-            'remediation' => "터미널에서 직접 실행 권한을 부여하세요:\nsudo chmod +x {$path}\n또는 (소유권 확인) sudo chown www-data:www-data {$path} && sudo chmod 755 {$path}",
+            'remediation' => "터미널에서 실행 권한을 부여하세요. 아래 중 하나만 실행하면 됩니다:\n\n"
+                . "▶ 간단:\n  sudo chmod +x {$path}\n\n"
+                . "▶ 전체 디렉토리 일괄 (자동 복구도 가능해짐):\n  sudo chmod -R 0777 {$this->binDir}",
         ];
     }
 
