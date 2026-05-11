@@ -42,18 +42,19 @@ class HealthCheckController
      */
     public function check(): JsonResponse
     {
+        // 현재 OS/아키텍처에 해당하는 CLI 바이너리만 체크 — NhnKcpApiService::executeCli() 와 동일 기준
+        [$cliFilename, $cliArch, $cliRequireExec] = $this->resolveCliForCurrentOs();
+
         $checks = [
             $this->checkExecFunction(),
             $this->checkBinDirectory(),
-            $this->checkCliBinary('pp_cli_x64', '64-bit Linux'),
-            $this->checkCliBinary('pp_cli', '32-bit Linux'),
-            $this->checkCliBinary('pp_cli_exe.exe', 'Windows', requireExec: false),
+            $this->checkCliBinary($cliFilename, $cliArch, $cliRequireExec),
             $this->checkPubKey(),
             $this->checkSoapExtension(),
             $this->checkWsdlFile(),
         ];
 
-        $summary = $this->summarize($checks);
+        $summary = $this->summarize($checks, $cliFilename);
 
         return response()->json([
             'success' => true,
@@ -65,11 +66,34 @@ class HealthCheckController
     }
 
     /**
+     * 현재 PHP 런타임의 OS/아키텍처에 맞는 CLI 바이너리 정보 반환
+     *
+     * @return array{0: string, 1: string, 2: bool}  [filename, arch label, requireExec]
+     */
+    private function resolveCliForCurrentOs(): array
+    {
+        // Windows
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            // Windows 는 ACL 기반이라 ELF 의 +x 비트 검사를 적용하지 않음
+            return ['pp_cli_exe.exe', 'Windows', false];
+        }
+
+        // Linux 32-bit (PHP_INT_MAX == 2^31-1)
+        if (PHP_INT_MAX === 2147483647) {
+            return ['pp_cli', 'Linux 32-bit', true];
+        }
+
+        // Linux 64-bit (기본)
+        return ['pp_cli_x64', 'Linux 64-bit', true];
+    }
+
+    /**
      * 상태 통계: 카테고리별로 PC/모바일 결제 가능 여부 판단
      *
      * @param  array<int, array<string, mixed>>  $checks
+     * @param  string  $cliFilename  현재 OS 의 CLI 바이너리 파일명 (cli_id 계산용)
      */
-    private function summarize(array $checks): array
+    private function summarize(array $checks, string $cliFilename): array
     {
         $byId = [];
         foreach ($checks as $c) {
@@ -77,8 +101,11 @@ class HealthCheckController
         }
 
         $execOk = ! $this->isErroneous($byId['exec_function'] ?? null);
-        $cliOk = ! $this->isErroneous($byId['cli_pp_cli_x64'] ?? null)
-            || ! $this->isErroneous($byId['cli_pp_cli'] ?? null);
+
+        // 현재 OS 의 CLI 바이너리 ID 동적 계산 (checkCliBinary 와 동일 규칙)
+        $cliId = 'cli_' . preg_replace('/[^a-z0-9_]/i', '_', strtolower(pathinfo($cliFilename, PATHINFO_FILENAME)));
+        $cliOk = ! $this->isErroneous($byId[$cliId] ?? null);
+
         $pubKeyOk = ! $this->isErroneous($byId['pub_key'] ?? null);
 
         $pcReady = $execOk && $cliOk && $pubKeyOk;
@@ -192,9 +219,9 @@ class HealthCheckController
                 'id' => $id,
                 'category' => 'pc',
                 'label' => $label,
-                'status' => self::STATUS_WARNING,
-                'detail' => '파일 없음 (이 아키텍처 미사용 시 무시 가능)',
-                'remediation' => null,
+                'status' => self::STATUS_ERROR,
+                'detail' => "파일이 없습니다: {$path}",
+                'remediation' => "현재 OS({$arch})에 해당하는 KCP CLI 바이너리를 bin/ 에 복사하세요. (테스트 환경은 플러그인 기본 제공)",
             ];
         }
 
