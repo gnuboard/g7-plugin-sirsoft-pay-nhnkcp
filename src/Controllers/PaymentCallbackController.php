@@ -396,6 +396,13 @@ class PaymentCallbackController
             return $baseUrl;
         }
 
+        // error 코드와 message 가 모두 있으면 message 앞에 '[코드] ' 자동 prefix.
+        // 체크아웃 페이지에서 사용자가 오류 종류를 즉시 식별할 수 있도록 한다.
+        // 예: error=9502, message=연동 모듈 호출 오류 → message=[9502] 연동 모듈 호출 오류
+        if (! empty($queryParams['error']) && ! empty($queryParams['message'])) {
+            $queryParams['message'] = sprintf('[%s] %s', $queryParams['error'], $queryParams['message']);
+        }
+
         $query = http_build_query(array_filter($queryParams));
         $separator = str_contains($baseUrl, '?') ? '&' : '?';
 
