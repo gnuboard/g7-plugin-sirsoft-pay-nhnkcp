@@ -33,7 +33,7 @@ class KcpCancelledError extends Error {
     }
 }
 
-// KCP pay_method 비트마스크 변환 (payplus_web.jsp 규격)
+// KCP pay_method 비트마스크 변환 (PC: payplus_web.jsp 규격)
 const KCP_PAY_METHOD: Record<string, string> = {
     card:            '100000000000', // 신용카드
     bank_transfer:   '010000000000', // 계좌이체
@@ -44,9 +44,7 @@ const KCP_PAY_METHOD: Record<string, string> = {
     phone:           '000010000000',
 };
 
-// KCP 간편결제 direct 파라미터 (payplus_web.jsp 규격)
-// 간편결제는 pay_method="100000000000"(카드)로 고정하고, 결제수단은 direct 파라미터로 지정한다.
-// 네이버페이 포인트: naverpay_direct + naverpay_point_direct 둘 다 필요
+// KCP 간편결제 direct 파라미터 (PC/모바일 공통)
 const KCP_EASY_PAY_DIRECT: Record<string, Record<string, string>> = {
     nhnkcp_payco:          { payco_direct: 'Y' },
     nhnkcp_naverpay:       { naverpay_direct: 'Y' },
@@ -56,20 +54,39 @@ const KCP_EASY_PAY_DIRECT: Record<string, Record<string, string>> = {
 };
 
 /**
+ * 모바일 기기 여부 판별 (3단계 fallback)
+ *
+ * 1) User Agent Client Hints — 브라우저가 직접 판단 (Chrome/Edge 90+)
+ * 2) UA 문자열 파싱
+ * 3) iPadOS 등 데스크탑 UA를 보내는 터치 기기 판별 (maxTouchPoints > 1)
+ */
+function isMobileDevice(): boolean {
+    if (typeof navigator === 'undefined') return false;
+
+    const nav = navigator as Navigator & { userAgentData?: { mobile: boolean } };
+    if (nav.userAgentData?.mobile !== undefined) {
+        return nav.userAgentData.mobile;
+    }
+
+    const ua = (navigator.userAgent || '').toLowerCase();
+    if (/android|iphone|ipod|windows phone|iemobile|blackberry|opera mini|mobile safari/.test(ua)) {
+        return true;
+    }
+
+    // iPadOS, Android 태블릿 등 — 터치스크린 노트북은 maxTouchPoints=1이므로 >1 조건 필요
+    const touchPoints = (navigator as Navigator & { maxTouchPoints?: number }).maxTouchPoints ?? 0;
+    if (touchPoints > 1 && !ua.includes('windows') && !ua.includes('macintosh')) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
  * NHN KCP 결제창 호출 핸들러
  *
- * Chrome은 비동기로 로드된 외부 스크립트에서 document.write()를 차단합니다.
- * KCP payplus_web.jsp는 내부적으로 document.write()를 사용하므로,
- * iframe 내에서 동기 파싱 방식(document.open/write/close)으로 SDK를 로드합니다.
- *
- * 흐름:
- *   1. Client Config API → site_cd, sdk_url 획득
- *   2. 메인 창에 반투명 dim 오버레이 추가
- *   3. 투명 iframe 생성 → document.open/write/close로 SDK 동기 로드
- *   4. iframe 내 KCP_Pay_Execute() 호출 → 결제창 오픈
- *   5. m_Completepayment 콜백에서 res_cd 확인
- *      - 성공(0000): Ret_URL로 POST → 완료 페이지 이동
- *      - 취소/오류: iframe+overlay 제거, 결제 상태 복원
+ * - 모바일: SOAP approval_key 획득 → form POST(페이지 전환) → 기존 authCallback 처리
+ * - PC: payplus_web.jsp SDK를 iframe 내 동기 로드 → KCP_Pay_Execute() → 콜백
  */
 export async function requestPaymentHandler(action: any, _context?: any): Promise<void> {
     const { pgPaymentData, paymentMethod: paramPaymentMethod } = (action.params || {}) as RequestPaymentParams;
@@ -96,92 +113,177 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
         const config: ClientConfig = configJson.data;
         const callbackUrl = window.location.origin + config.callback_urls.callback;
 
-        // 간편결제는 pay_method 항상 "100000000000" (카드 비트마스크), direct 파라미터로 수단 지정
-        const payMethod = isEasyPay
-            ? '100000000000'
-            : (KCP_PAY_METHOD[pgPaymentData.pay_method ?? 'card'] ?? '100000000000');
-
-        // 간편결제는 테스트용 별도 site_cd(S6729) 사용 (레거시 settle_kcp.inc.php 동일 패턴)
-        const siteCd = isEasyPay ? (config.easy_pay_client_id ?? config.client_id) : config.client_id;
-
-        const fields: Record<string, string> = {
-            site_cd: siteCd,
-            ordr_idxx: pgPaymentData.order_number,
-            good_name: pgPaymentData.order_name,
-            good_mny: String(pgPaymentData.amount),
-            buyr_name: pgPaymentData.customer_name ?? '',
-            buyr_mail: pgPaymentData.customer_email ?? '',
-            buyr_tel1: pgPaymentData.customer_phone ?? '',
-            pay_method: payMethod,
-            Ret_URL: callbackUrl,
-        };
-
-        // 간편결제 종류별 direct 파라미터 추가
-        if (isEasyPay) {
-            const directFields = KCP_EASY_PAY_DIRECT[paymentMethod];
-            if (directFields) {
-                Object.assign(fields, directFields);
-            }
+        if (isMobileDevice()) {
+            await handleMobilePayment(G7Core, pgPaymentData, paymentMethod, isEasyPay, callbackUrl);
+        } else {
+            await handlePcPayment(config, pgPaymentData, paymentMethod, isEasyPay, callbackUrl);
         }
 
-        const hiddenInputs = Object.entries(fields)
-            .map(([n, v]) => `<input type="hidden" name="${n}" value="${v.replace(/"/g, '&quot;')}">`)
-            .join('');
+    } catch (error: unknown) {
+        if (error instanceof KcpCancelledError) {
+            G7Core?.state?.setLocal?.({ isSubmittingOrder: false, paymentMethod });
+            return;
+        }
 
-        await new Promise<void>((resolve, reject) => {
-            // 기존 요소 정리
-            document.getElementById('kcp-sdk-iframe')?.remove();
-            document.getElementById('kcp-dim-overlay')?.remove();
+        console.error('[sirsoft-pay_nhnkcp] requestPayment error', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        G7Core?.state?.setLocal?.({ paymentErrorMessage: errorMessage, isSubmittingOrder: false, paymentMethod });
+        G7Core?.modal?.open?.('nhnkcp_payment_error_modal');
+    }
+}
 
-            // 2. 메인 창에 반투명 dim 오버레이 (결제창 뒤 배경)
-            const overlay = document.createElement('div');
-            overlay.id = 'kcp-dim-overlay';
-            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:99998;';
-            document.body.appendChild(overlay);
+/**
+ * 모바일 결제 흐름
+ *
+ * 1) 서버에서 SOAP으로 approval_key + pay_url 획득
+ * 2) 전체 form fields를 받아 브라우저가 pay_url 로 POST 전환 (페이지 이동)
+ * 3) KCP가 결제 완료 후 Ret_URL(authCallback)로 redirect → 기존 서버 처리
+ */
+async function handleMobilePayment(
+    G7Core: any,
+    pgPaymentData: PgPaymentData,
+    paymentMethod: string,
+    isEasyPay: boolean,
+    callbackUrl: string,
+): Promise<void> {
+    const approvalJson = await G7Core.api.post('/plugins/sirsoft-pay_nhnkcp/mobile/approval-key', {
+        order_number: pgPaymentData.order_number,
+        amount: pgPaymentData.amount,
+        good_name: pgPaymentData.order_name,
+        pay_method: paymentMethod,
+        buyr_name: pgPaymentData.customer_name ?? '',
+        buyr_mail: pgPaymentData.customer_email ?? '',
+        buyr_tel1: pgPaymentData.customer_phone ?? '',
+        ret_url: callbackUrl,
+    });
 
-            // 3. 투명 iframe - KCP 결제창이 내부에 렌더링됨
-            const iframe = document.createElement('iframe');
-            iframe.id = 'kcp-sdk-iframe';
-            iframe.setAttribute('allowtransparency', 'true');
-            iframe.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;border:0;z-index:99999;background:transparent;';
-            document.body.appendChild(iframe);
+    if (!approvalJson.success || !approvalJson.data) {
+        throw new Error(approvalJson.error ?? 'KCP 모바일 승인키 획득 실패');
+    }
 
-            const iframeWin = iframe.contentWindow as any;
+    const { pay_url, fields } = approvalJson.data as { pay_url: string; fields: Record<string, string> };
 
-            const cleanup = () => {
-                iframe.remove();
-                overlay.remove();
-            };
+    // 페이지 전환 form 생성 및 제출
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = pay_url;
+    form.acceptCharset = 'euc-kr'; // KCP 모바일은 EUC-KR 인코딩 필요
+    form.style.display = 'none';
 
-            // 5. 결제 완료 콜백 - KCP가 결제 후 호출
-            iframeWin.m_Completepayment = function (form: HTMLFormElement) {
-                const resCode = (form.elements as any)['res_cd']?.value ?? '';
-                const resMsg  = (form.elements as any)['res_msg']?.value ?? '';
+    for (const [name, value] of Object.entries(fields)) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = String(value);
+        form.appendChild(input);
+    }
 
-                if (resCode === '0000') {
-                    // 결제 성공 → Ret_URL로 POST 제출 (top window 이동)
-                    form.action = callbackUrl;
-                    form.method = 'POST';
-                    form.target = '_top';
-                    iframeWin.document.body.appendChild(form);
-                    form.submit();
-                } else {
-                    // 취소 또는 오류
-                    cleanup();
-                    const isCancelled = resCode === '' || resCode === '7777' || resMsg.includes('취소');
-                    reject(isCancelled ? new KcpCancelledError(resMsg) : new Error(`KCP 오류 [${resCode}]: ${resMsg}`));
-                }
-            };
+    document.body.appendChild(form);
+    form.submit();
 
-            iframeWin.__kcpFail = (err: Error) => {
+    // 페이지가 pay_url 로 이동하므로 Promise는 자연스럽게 중단됨
+    await new Promise<never>(() => {});
+}
+
+/**
+ * PC 결제 흐름
+ *
+ * Chrome 비동기 document.write() 차단을 우회하기 위해 iframe 내에서
+ * document.open/write/close 로 SDK를 동기 로드한 뒤 KCP_Pay_Execute() 호출.
+ */
+async function handlePcPayment(
+    config: ClientConfig,
+    pgPaymentData: PgPaymentData,
+    paymentMethod: string,
+    isEasyPay: boolean,
+    callbackUrl: string,
+): Promise<void> {
+    // 간편결제는 pay_method 항상 "100000000000" (카드 비트마스크), direct 파라미터로 수단 지정
+    const payMethod = isEasyPay
+        ? '100000000000'
+        : (KCP_PAY_METHOD[pgPaymentData.pay_method ?? 'card'] ?? '100000000000');
+
+    // 간편결제는 테스트용 별도 site_cd(S6729) 사용 (레거시 settle_kcp.inc.php 동일 패턴)
+    const siteCd = isEasyPay ? (config.easy_pay_client_id ?? config.client_id) : config.client_id;
+
+    const fields: Record<string, string> = {
+        site_cd: siteCd,
+        ordr_idxx: pgPaymentData.order_number,
+        good_name: pgPaymentData.order_name,
+        good_mny: String(pgPaymentData.amount),
+        buyr_name: pgPaymentData.customer_name ?? '',
+        buyr_mail: pgPaymentData.customer_email ?? '',
+        buyr_tel1: pgPaymentData.customer_phone ?? '',
+        pay_method: payMethod,
+        Ret_URL: callbackUrl,
+    };
+
+    // 간편결제 종류별 direct 파라미터 추가
+    if (isEasyPay) {
+        const directFields = KCP_EASY_PAY_DIRECT[paymentMethod];
+        if (directFields) {
+            Object.assign(fields, directFields);
+        }
+    }
+
+    const hiddenInputs = Object.entries(fields)
+        .map(([n, v]) => `<input type="hidden" name="${n}" value="${v.replace(/"/g, '&quot;')}">`)
+        .join('');
+
+    await new Promise<void>((resolve, reject) => {
+        // 기존 요소 정리
+        document.getElementById('kcp-sdk-iframe')?.remove();
+        document.getElementById('kcp-dim-overlay')?.remove();
+
+        // 메인 창에 반투명 dim 오버레이 (결제창 뒤 배경)
+        const overlay = document.createElement('div');
+        overlay.id = 'kcp-dim-overlay';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:99998;';
+        document.body.appendChild(overlay);
+
+        // 투명 iframe - KCP 결제창이 내부에 렌더링됨
+        const iframe = document.createElement('iframe');
+        iframe.id = 'kcp-sdk-iframe';
+        iframe.setAttribute('allowtransparency', 'true');
+        iframe.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;border:0;z-index:99999;background:transparent;';
+        document.body.appendChild(iframe);
+
+        const iframeWin = iframe.contentWindow as any;
+
+        const cleanup = () => {
+            iframe.remove();
+            overlay.remove();
+        };
+
+        // 결제 완료 콜백 - KCP가 결제 후 호출
+        iframeWin.m_Completepayment = function (form: HTMLFormElement) {
+            const resCode = (form.elements as any)['res_cd']?.value ?? '';
+            const resMsg  = (form.elements as any)['res_msg']?.value ?? '';
+
+            if (resCode === '0000') {
+                // 결제 성공 → Ret_URL로 POST 제출 (top window 이동)
+                form.action = callbackUrl;
+                form.method = 'POST';
+                form.target = '_top';
+                iframeWin.document.body.appendChild(form);
+                form.submit();
+            } else {
+                // 취소 또는 오류
                 cleanup();
-                reject(err);
-            };
+                const isCancelled = resCode === '' || resCode === '7777' || resMsg.includes('취소');
+                reject(isCancelled ? new KcpCancelledError(resMsg) : new Error(`KCP 오류 [${resCode}]: ${resMsg}`));
+            }
+        };
 
-            // 4. SDK 동기 로드 + KCP_Pay_Execute 호출
-            const iframeDoc = (iframe.contentDocument || iframeWin.document) as Document;
-            iframeDoc.open();
-            iframeDoc.write(`<!DOCTYPE html><html><head>
+        iframeWin.__kcpFail = (err: Error) => {
+            cleanup();
+            reject(err);
+        };
+
+        // SDK 동기 로드 + KCP_Pay_Execute 호출
+        const iframeDoc = (iframe.contentDocument || iframeWin.document) as Document;
+        iframeDoc.open();
+        iframeDoc.write(`<!DOCTYPE html><html><head>
 <script src="${config.sdk_url}"><\/script>
 </head><body style="margin:0;padding:0;background:transparent;">
 <form name="order_info">${hiddenInputs}</form>
@@ -198,26 +300,14 @@ try {
 }
 <\/script>
 </body></html>`);
-            iframeDoc.close();
+        iframeDoc.close();
 
-            // SDK 로드 실패 대비 타임아웃 — 결제창이 열리면(__kcpReady) 즉시 해제됨
-            const sdkLoadTimer = setTimeout(() => {
-                cleanup();
-                reject(new Error('KCP SDK load timeout'));
-            }, 15000);
+        // SDK 로드 실패 대비 타임아웃 — 결제창이 열리면(__kcpReady) 즉시 해제됨
+        const sdkLoadTimer = setTimeout(() => {
+            cleanup();
+            reject(new Error('KCP SDK load timeout'));
+        }, 15000);
 
-            iframeWin.__kcpReady = () => clearTimeout(sdkLoadTimer);
-        });
-
-    } catch (error: unknown) {
-        if (error instanceof KcpCancelledError) {
-            G7Core?.state?.setLocal?.({ isSubmittingOrder: false, paymentMethod });
-            return;
-        }
-
-        console.error('[sirsoft-pay_nhnkcp] requestPayment error', error);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        G7Core?.state?.setLocal?.({ paymentErrorMessage: errorMessage, isSubmittingOrder: false, paymentMethod });
-        G7Core?.modal?.open?.('nhnkcp_payment_error_modal');
-    }
+        iframeWin.__kcpReady = () => clearTimeout(sdkLoadTimer);
+    });
 }

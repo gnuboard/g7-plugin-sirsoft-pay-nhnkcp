@@ -40,8 +40,8 @@ class AuthCallbackRequest extends FormRequest
         return [
             'res_cd' => ['required', 'string'],
             'res_msg' => ['nullable', 'string'],
-            'enc_data' => ['required', 'string'],
-            'enc_info' => ['required', 'string'],
+            'enc_data' => ['nullable', 'string'],
+            'enc_info' => ['nullable', 'string'],
             'tno' => ['nullable', 'string'],
             'ordr_idxx' => ['required', 'string'],
             'good_mny' => ['nullable', 'numeric', 'min:1'],

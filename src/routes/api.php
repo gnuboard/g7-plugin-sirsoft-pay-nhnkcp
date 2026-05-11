@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\AdminTransactionController;
+use Plugins\Sirsoft\PayNhnkcp\Controllers\MobileApprovalController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\UserReceiptController;
 
 /*
@@ -17,6 +18,10 @@ use Plugins\Sirsoft\PayNhnkcp\Controllers\UserReceiptController;
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/user/orders/{orderNumber}/receipt', [UserReceiptController::class, 'show'])
         ->name('user.orders.receipt');
+
+    // 모바일 결제 승인키 획득 (KCP SmartPhone Pay SOAP)
+    Route::post('/mobile/approval-key', [MobileApprovalController::class, 'getApprovalKey'])
+        ->name('mobile.approval-key');
 });
 
 Route::prefix('admin')->name('admin.')->middleware(['auth:sanctum', 'admin'])->group(function () {

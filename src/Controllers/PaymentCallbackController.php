@@ -30,6 +30,9 @@ class PaymentCallbackController
 
     private const SUCCESS_RES_CD = '0000';
 
+    // 사용자가 결제창을 직접 닫은 취소 코드 — 조용히 체크아웃으로 복귀
+    private const CANCEL_RES_CODES = ['3001', '3000', '7777', ''];
+
     public function __construct(
         private readonly OrderProcessingService $orderService,
         private readonly PluginSettingsService $pluginSettingsService,
@@ -75,11 +78,19 @@ class PaymentCallbackController
 
         // 1단계: KCP 브라우저 결과 코드 확인
         if ($resCd !== self::SUCCESS_RES_CD) {
-            Log::warning('KCP: payment result failed', [
+            $isCancelled = in_array($resCd, self::CANCEL_RES_CODES, true);
+
+            Log::info('KCP: payment result non-success', [
                 'ordr_idxx' => $ordrIdxx,
                 'res_cd' => $resCd,
                 'res_msg' => $resMsg,
+                'is_cancelled' => $isCancelled,
             ]);
+
+            // 사용자 취소는 오류 없이 체크아웃으로 복귀
+            if ($isCancelled) {
+                return redirect($this->resolveFailUrl());
+            }
 
             return redirect($this->resolveFailUrl([
                 'error' => $resCd,
