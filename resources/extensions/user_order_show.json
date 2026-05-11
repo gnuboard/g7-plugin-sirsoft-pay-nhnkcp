@@ -209,7 +209,7 @@
                     "type": "basic",
                     "name": "Div",
                     "if": "{{order.data.payment?.pg_provider === 'nhnkcp' && order.data.payment?.transaction_id}}",
-                    "props": { "className": "pt-4 mt-2 border-t border-gray-200 dark:border-gray-700" },
+                    "props": { "id": "kcp-mp-receipt-row", "className": "pt-4 mt-2 border-t border-gray-200 dark:border-gray-700" },
                     "children": [
                         {
                             "type": "basic",
@@ -224,119 +224,61 @@
                                 },
                                 {
                                     "type": "basic",
-                                    "name": "Div",
-                                    "props": { "className": "flex items-center gap-3" },
+                                    "name": "Button",
+                                    "props": {
+                                        "type": "button",
+                                        "className": "inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50",
+                                        "disabled": "{{_local._kcpReceiptLoading === true}}"
+                                    },
+                                    "actions": [
+                                        {
+                                            "type": "click",
+                                            "handler": "sequence",
+                                            "actions": [
+                                                {
+                                                    "handler": "setState",
+                                                    "params": { "target": "local", "_kcpReceiptLoading": true }
+                                                },
+                                                {
+                                                    "handler": "apiCall",
+                                                    "auth_required": true,
+                                                    "target": "/api/plugins/sirsoft-pay_nhnkcp/user/orders/{{route.order_number}}/receipt",
+                                                    "params": { "method": "GET" }
+                                                },
+                                                {
+                                                    "handler": "callExternal",
+                                                    "params": {
+                                                        "constructor": "KcpReceiptPopup",
+                                                        "args": {
+                                                            "url": "{{$prev.receipt_url}}",
+                                                            "cash_url": "{{$prev.cash_receipt_url}}"
+                                                        }
+                                                    }
+                                                },
+                                                {
+                                                    "handler": "setState",
+                                                    "params": { "target": "local", "_kcpReceiptLoading": false }
+                                                }
+                                            ]
+                                        }
+                                    ],
                                     "children": [
                                         {
                                             "type": "basic",
-                                            "name": "Button",
-                                            "if": "{{!_local._kcpReceiptLoaded}}",
-                                            "props": {
-                                                "type": "button",
-                                                "className": "inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50",
-                                                "disabled": "{{_local._kcpReceiptLoading === true}}"
-                                            },
-                                            "actions": [
-                                                {
-                                                    "type": "click",
-                                                    "handler": "sequence",
-                                                    "actions": [
-                                                        {
-                                                            "handler": "setState",
-                                                            "params": { "target": "local", "_kcpReceiptLoading": true }
-                                                        },
-                                                        {
-                                                            "handler": "apiCall",
-                                                            "auth_required": true,
-                                                            "target": "/api/plugins/sirsoft-pay_nhnkcp/user/orders/{{route.order_number}}/receipt",
-                                                            "params": { "method": "GET" },
-                                                            "onSuccess": [
-                                                                {
-                                                                    "handler": "setState",
-                                                                    "params": {
-                                                                        "target": "local",
-                                                                        "_kcpReceiptLoading": false,
-                                                                        "_kcpReceiptLoaded": true,
-                                                                        "_kcpReceiptUrl": "{{$response.receipt_url}}",
-                                                                        "_kcpCashReceiptUrl": "{{$response.cash_receipt_url}}"
-                                                                    }
-                                                                }
-                                                            ],
-                                                            "onError": [
-                                                                {
-                                                                    "handler": "setState",
-                                                                    "params": { "target": "local", "_kcpReceiptLoading": false }
-                                                                }
-                                                            ]
-                                                        }
-                                                    ]
-                                                }
-                                            ],
-                                            "children": [
-                                                {
-                                                    "type": "basic",
-                                                    "name": "Icon",
-                                                    "if": "{{_local._kcpReceiptLoading === true}}",
-                                                    "props": { "name": "spinner", "className": "w-3.5 h-3.5 animate-spin" }
-                                                },
-                                                {
-                                                    "type": "basic",
-                                                    "name": "Icon",
-                                                    "if": "{{!_local._kcpReceiptLoading}}",
-                                                    "props": { "name": "file-text", "className": "w-3.5 h-3.5" }
-                                                },
-                                                {
-                                                    "type": "basic",
-                                                    "name": "Span",
-                                                    "text": "$t:sirsoft-pay_nhnkcp.user.receipt_view"
-                                                }
-                                            ]
+                                            "name": "Icon",
+                                            "if": "{{_local._kcpReceiptLoading === true}}",
+                                            "props": { "name": "spinner", "className": "w-3.5 h-3.5 animate-spin" }
                                         },
                                         {
                                             "type": "basic",
-                                            "name": "A",
-                                            "if": "{{_local._kcpReceiptLoaded && _local._kcpReceiptUrl}}",
-                                            "props": {
-                                                "href": "{{_local._kcpReceiptUrl}}",
-                                                "target": "_blank",
-                                                "rel": "noopener noreferrer",
-                                                "className": "inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline"
-                                            },
-                                            "children": [
-                                                {
-                                                    "type": "basic",
-                                                    "name": "Icon",
-                                                    "props": { "name": "file-text", "className": "w-3.5 h-3.5" }
-                                                },
-                                                {
-                                                    "type": "basic",
-                                                    "name": "Span",
-                                                    "text": "$t:sirsoft-pay_nhnkcp.user.receipt_view"
-                                                }
-                                            ]
+                                            "name": "Icon",
+                                            "if": "{{!_local._kcpReceiptLoading}}",
+                                            "props": { "name": "file-text", "className": "w-3.5 h-3.5" }
                                         },
                                         {
                                             "type": "basic",
-                                            "name": "A",
-                                            "if": "{{_local._kcpReceiptLoaded && _local._kcpCashReceiptUrl}}",
-                                            "props": {
-                                                "href": "{{_local._kcpCashReceiptUrl}}",
-                                                "target": "_blank",
-                                                "rel": "noopener noreferrer",
-                                                "className": "inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-400 hover:underline"
-                                            },
-                                            "children": [
-                                                {
-                                                    "type": "basic",
-                                                    "name": "Icon",
-                                                    "props": { "name": "receipt", "className": "w-3.5 h-3.5" }
-                                                },
-                                                {
-                                                    "type": "basic",
-                                                    "name": "Span",
-                                                    "text": "$t:sirsoft-pay_nhnkcp.user.cash_receipt_view"
-                                                }
-                                            ]
+                                            "name": "Span",
+                                            "text": "$t:sirsoft-pay_nhnkcp.user.receipt_view"
                                         }
                                     ]
                                 }

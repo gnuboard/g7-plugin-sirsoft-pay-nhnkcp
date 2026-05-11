@@ -2,6 +2,19 @@ import { handlerMap } from './handlers';
 import { installOrderResponseInterceptor } from './orderResponseInterceptor';
 import { installOrderCompleteReceiptInjector } from './orderCompleteReceiptInjector';
 
+class KcpReceiptPopup {
+    constructor(params: { url?: string; cash_url?: string }) {
+        const features = 'width=800,height=600,scrollbars=yes,resizable=yes,toolbar=no,menubar=no';
+        if (params.url) {
+            window.open(params.url, 'kcp_receipt', features);
+        }
+        if (params.cash_url) {
+            window.open(params.cash_url, 'kcp_cash_receipt', features);
+        }
+    }
+}
+(window as Record<string, unknown>).KcpReceiptPopup = KcpReceiptPopup;
+
 const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
 
 const logger = {
