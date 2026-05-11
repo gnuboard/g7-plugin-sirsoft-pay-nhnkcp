@@ -112,7 +112,7 @@ class PaymentCallbackController
             // 가상계좌: 계좌 발급 완료 처리 (실제 입금은 vbankNotify에서 처리)
             // KCP 콜백의 use_pay_method=VCNT 또는 주문의 payment_method=vbank 로 감지
             $isVbank = ($validated['use_pay_method'] ?? '') === 'VCNT'
-                || ($order->payment?->payment_method?->value === 'vbank');
+                || in_array($order->payment?->payment_method?->value, ['vbank', 'virtual_account'], true);
             if ($isVbank) {
                 return $this->handleVbankIssued($validated, $order, $encData, $encInfo, $ordrIdxx, $custIp);
             }

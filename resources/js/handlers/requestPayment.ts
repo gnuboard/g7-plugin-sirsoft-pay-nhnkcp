@@ -27,6 +27,7 @@ interface ClientConfig {
     callback_urls: {
         callback: string;
     };
+    vbank_expire_days?: number;
 }
 
 // 사용자가 결제창을 직접 닫은 경우 - 에러 모달 없이 조용히 처리
@@ -232,6 +233,12 @@ async function handlePcPayment(
         fields['comm_tax_mny']  = String(supplyAmt);
         fields['comm_vat_mny']  = String(vatAmt);
         fields['comm_free_mny'] = String(taxFreeAmt);
+    }
+
+    // 가상계좌 전용 파라미터
+    if (payMethod === '001000000000') {
+        fields['vcnt_expire_term'] = String(config.vbank_expire_days ?? 3);
+        fields['disp_tax_yn'] = 'N';
     }
 
     // 간편결제 종류별 direct 파라미터 추가

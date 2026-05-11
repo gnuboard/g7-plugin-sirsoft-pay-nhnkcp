@@ -120,6 +120,7 @@ class RegisterPgProviderListener implements HookListenerInterface
                 'callback' => '/plugins/sirsoft-pay_nhnkcp/payment/callback',
             ],
             'enabled_easy_pays' => $enabledEasyPays,
+            'vbank_expire_days' => (int) ($settings['vbank_expire_days'] ?? 3),
         ]);
     }
 

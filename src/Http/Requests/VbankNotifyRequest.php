@@ -35,7 +35,7 @@ class VbankNotifyRequest extends FormRequest
         return [
             'tno' => ['required', 'string'],
             'ordr_idxx' => ['required', 'string'],
-            'good_mny' => ['required', 'integer', 'min:1'],
+            'good_mny' => ['required', 'numeric', 'min:1'],
             'res_cd' => ['required', 'string'],
             'res_msg' => ['nullable', 'string'],
             'bank_name' => ['nullable', 'string'],

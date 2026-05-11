@@ -46,6 +46,8 @@ class MobileApprovalController
         'nhnkcp_applepay' => ['applepay_direct' => 'Y'],
     ];
 
+    private const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
+
     public function __construct(
         private readonly KcpSoapService $soapService,
         private readonly OrderProcessingService $orderService,
@@ -106,6 +108,13 @@ class MobileApprovalController
                 'approval_key' => $result['approval_key'],
                 ...$this->buildTaxFields($validated['order_number']),
             ];
+
+            // 가상계좌 전용 파라미터
+            if ($mobilePayMethod === 'VCNT') {
+                $settings = plugin_settings(self::PLUGIN_IDENTIFIER) ?? [];
+                $fields['vcnt_expire_term'] = (string) ((int) ($settings['vbank_expire_days'] ?? 3));
+                $fields['disp_tax_yn'] = 'N';
+            }
 
             if ($isEasyPay && isset(self::EASY_PAY_DIRECT_FIELDS[$payMethodKey])) {
                 $fields = [...$fields, ...self::EASY_PAY_DIRECT_FIELDS[$payMethodKey]];
