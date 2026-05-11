@@ -61,8 +61,8 @@ class PaymentCallbackController
 
         $resCd = $validated['res_cd'];
         $resMsg = $validated['res_msg'] ?? '';
-        $encData = $validated['enc_data'];
-        $encInfo = $validated['enc_info'];
+        $encData = $validated['enc_data'] ?? '';  // 모바일 취소 시 미포함
+        $encInfo = $validated['enc_info'] ?? '';  // 모바일 취소 시 미포함
         $ordrIdxx = $validated['ordr_idxx'];
         $goodMny = isset($validated['good_mny']) ? (int) $validated['good_mny'] : 0;
         $custIp = $request->ip() ?? '127.0.0.1';
