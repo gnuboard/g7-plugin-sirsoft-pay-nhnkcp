@@ -253,7 +253,7 @@ class HealthCheckController
             'label' => $label,
             'status' => self::STATUS_ERROR,
             'detail' => "실행 권한 없음 ({$beforeMode}) — 자동 복구 실패",
-            'remediation' => "터미널에서 이 파일에만 실행 권한을 부여하세요:\n  sudo chmod +x {$path}",
+            'remediation' => "이 파일에 실행 권한을 부여하세요:\n  chmod 755 {$path}\n파일 소유자가 아니면 앞에 sudo 를 붙이세요.",
         ];
     }
 
