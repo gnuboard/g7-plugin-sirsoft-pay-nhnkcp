@@ -8,6 +8,31 @@
                 {
                     "type": "basic",
                     "name": "Div",
+                    "if": "{{order.data.payment?.pg_provider === 'nhnkcp' && order.data.payment?.is_escrow}}",
+                    "props": { "className": "pt-2 mt-1" },
+                    "children": [
+                        {
+                            "type": "basic",
+                            "name": "Span",
+                            "props": { "className": "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300" },
+                            "children": [
+                                {
+                                    "type": "basic",
+                                    "name": "Icon",
+                                    "props": { "name": "shield-check", "className": "w-3 h-3" }
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "text": "$t:sirsoft-pay_nhnkcp.user.escrow_badge"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "basic",
+                    "name": "Div",
                     "if": "{{order.data.payment?.pg_provider === 'nhnkcp' && order.data.payment?.vbank_name}}",
                     "props": { "className": "pt-4 mt-2 border-t border-gray-200 dark:border-gray-700 space-y-3" },
                     "children": [

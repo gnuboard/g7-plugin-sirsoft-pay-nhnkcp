@@ -112,6 +112,9 @@ class RegisterPgProviderListener implements HookListenerInterface
         $easyPayTestSiteCd = $settings['easy_pay_test_site_cd'] ?? 'S6729';
         $easyPayClientId = $isTest ? $easyPayTestSiteCd : $liveSiteCd;
 
+        $useEscrow = (bool) ($settings['use_escrow'] ?? false);
+        $escrowClientId = $isTest ? ($settings['escrow_test_site_cd'] ?? 'T0007') : $siteCd;
+
         return array_merge($config, [
             'client_id' => $siteCd,
             'easy_pay_client_id' => $easyPayClientId,
@@ -121,6 +124,8 @@ class RegisterPgProviderListener implements HookListenerInterface
             ],
             'enabled_easy_pays' => $enabledEasyPays,
             'vbank_expire_days' => (int) ($settings['vbank_expire_days'] ?? 3),
+            'use_escrow' => $useEscrow,
+            'escrow_client_id' => $escrowClientId,
         ]);
     }
 

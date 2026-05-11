@@ -32,6 +32,8 @@ class KcpSoapService
 
     private string $siteCd;
 
+    private string $escrowSiteCd;
+
     private string $easyPaySiteCd;
 
     private string $binDir;
@@ -48,6 +50,10 @@ class KcpSoapService
 
         $this->siteCd = $this->isTest
             ? ($settings['test_site_cd'] ?? 'T0000')
+            : $liveSiteCd;
+
+        $this->escrowSiteCd = $this->isTest
+            ? ($settings['escrow_test_site_cd'] ?? 'T0007')
             : $liveSiteCd;
 
         $easyPayTestSiteCd = $settings['easy_pay_test_site_cd'] ?? 'S6729';
@@ -161,6 +167,11 @@ class KcpSoapService
     public function getSiteCd(string $payMethodKey = ''): string
     {
         return $this->resolveSiteCd($payMethodKey);
+    }
+
+    public function getEscrowSiteCd(): string
+    {
+        return $this->escrowSiteCd;
     }
 
     private function resolveSiteCd(string $payMethodKey): string

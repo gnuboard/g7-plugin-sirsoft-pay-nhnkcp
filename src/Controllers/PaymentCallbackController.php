@@ -149,6 +149,8 @@ class PaymentCallbackController
                 ? $goodMny
                 : (int) round((float) $order->total_amount, 2);
 
+            $isEscrow = ($pgResponse['escw_yn'] ?? '') === 'Y';
+
             // 4단계: 주문 완료 처리
             $this->orderService->completePayment($order, [
                 'transaction_id' => $tno,
@@ -166,10 +168,16 @@ class PaymentCallbackController
                     'account' => $pgResponse['account'] ?? null,
                     'bank_name' => $pgResponse['bank_name'] ?? null,
                     'vnbank_expire_date' => $pgResponse['vnbank_expire_date'] ?? null,
+                    'escw_yn' => $pgResponse['escw_yn'] ?? null,
                     'pg_raw_response' => $pgResponse,
                 ],
                 'payment_device' => $this->detectDevice($request),
             ], $approvedAmt);
+
+            // 에스크로 결제인 경우 is_escrow 플래그 저장
+            if ($isEscrow) {
+                $order->payment()->update(['is_escrow' => true]);
+            }
 
             return redirect($this->resolveSuccessUrl($ordrIdxx));
 

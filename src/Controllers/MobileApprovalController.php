@@ -79,6 +79,9 @@ class MobileApprovalController
             ? 'CARD'
             : (self::MOBILE_PAY_METHOD_MAP[$payMethodKey] ?? 'CARD');
 
+        $settings = plugin_settings(self::PLUGIN_IDENTIFIER) ?? [];
+        $useEscrow = (bool) ($settings['use_escrow'] ?? false) && ! $isEasyPay;
+
         try {
             $result = $this->soapService->getApprovalKey(
                 orderNumber: $validated['order_number'],
@@ -87,12 +90,16 @@ class MobileApprovalController
                 payMethod: $mobilePayMethod,
                 retUrl: $validated['ret_url'],
                 payMethodKey: $payMethodKey,
-                escrow: false,
+                escrow: $useEscrow,
             );
+
+            $siteCd = $useEscrow
+                ? $this->soapService->getEscrowSiteCd()
+                : $this->soapService->getSiteCd($payMethodKey);
 
             $fields = [
                 'req_tx' => 'pay',
-                'site_cd' => $this->soapService->getSiteCd($payMethodKey),
+                'site_cd' => $siteCd,
                 'ordr_idxx' => $validated['order_number'],
                 'pay_method' => $mobilePayMethod,
                 'good_mny' => (string) $validated['amount'],
@@ -102,7 +109,7 @@ class MobileApprovalController
                 'buyr_tel1' => $validated['buyr_tel1'] ?? '',
                 'Ret_URL' => $validated['ret_url'],
                 'ActionResult' => self::ACTION_RESULT_MAP[$mobilePayMethod] ?? 'card',
-                'escw_used' => 'N',
+                'escw_used' => $useEscrow ? 'Y' : 'N',
                 'quotaopt' => '12',
                 'currency' => '410',
                 'approval_key' => $result['approval_key'],

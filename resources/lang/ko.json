@@ -30,7 +30,8 @@
         "tax_breakdown_title": "세금 상세",
         "supply_amount": "공급가액",
         "vat_amount": "부가세",
-        "tax_free_amount": "면세금액"
+        "tax_free_amount": "면세금액",
+        "escrow_badge": "에스크로"
     },
     "admin": {
         "test_mode_badge": "테스트 결제",
@@ -44,7 +45,23 @@
         "result_app_no": "승인번호",
         "result_app_time": "승인일시",
         "result_pay_method": "결제수단",
-        "result_res_cd": "응답코드"
+        "result_res_cd": "응답코드",
+        "escrow_badge": "에스크로",
+        "escrow_delivery_title": "KCP 에스크로 배송 등록",
+        "escrow_delivery_description": "상품 발송 후 KCP에 운송장번호를 등록하세요.",
+        "escrow_delivery_invoice_label": "운송장번호",
+        "escrow_delivery_invoice_placeholder": "운송장번호 입력",
+        "escrow_delivery_courier_label": "택배사",
+        "escrow_delivery_courier_placeholder": "택배사 선택",
+        "escrow_delivery_already_registered": "배송등록 완료",
+        "escrow_delivery_registered_at": "등록일시",
+        "escrow_delivery_invoice_info": "운송장번호",
+        "escrow_delivery_courier_info": "택배사",
+        "escrow_delivery_register_button": "배송등록",
+        "escrow_delivery_change_button": "배송정보 수정",
+        "escrow_delivery_registering": "등록 중...",
+        "escrow_delivery_success": "배송정보가 KCP에 등록되었습니다.",
+        "escrow_delivery_error": "배송등록에 실패했습니다."
     },
     "settings": {
         "title": "NHN KCP 설정",
@@ -90,7 +107,16 @@
         "section_vbank_notify": "가상계좌 입금통보 URL",
         "vbank_notify_hint": "NHN KCP 가맹점 어드민에서 이 URL을 입금통보 URL로 등록해야 가상계좌 결제가 자동으로 처리됩니다.",
         "vbank_notify_copied": "URL이 클립보드에 복사되었습니다.",
-        "copy": "복사"
+        "copy": "복사",
+        "section_escrow": "에스크로 설정",
+        "section_escrow_hint": "에스크로 결제를 사용하면 구매자가 구매확인 후 판매자에게 결제금액이 정산됩니다.",
+        "use_escrow": "에스크로 결제 사용",
+        "use_escrow_hint": "활성화하면 모든 결제에 에스크로가 적용됩니다.",
+        "escrow_test_site_cd": "에스크로 테스트 사이트 코드",
+        "escrow_test_site_cd_hint": "KCP 에스크로 테스트용 site_cd (기본값: T0007)",
+        "section_escrow_notify": "에스크로 공통통보 URL",
+        "escrow_common_notify_hint": "NHN KCP 가맹점 어드민에서 이 URL을 공통통보 URL로 등록해야 구매확인/취소가 자동으로 처리됩니다.",
+        "escrow_common_notify_copied": "URL이 클립보드에 복사되었습니다."
     },
     "easy_pay": {
         "section_title": "간편결제"

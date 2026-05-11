@@ -28,6 +28,8 @@ interface ClientConfig {
         callback: string;
     };
     vbank_expire_days?: number;
+    use_escrow?: boolean;
+    escrow_client_id?: string;
 }
 
 // 사용자가 결제창을 직접 닫은 경우 - 에러 모달 없이 조용히 처리
@@ -208,8 +210,10 @@ async function handlePcPayment(
         ? '100000000000'
         : (KCP_PAY_METHOD[pgPaymentData.pay_method ?? 'card'] ?? '100000000000');
 
-    // 간편결제는 테스트용 별도 site_cd(S6729) 사용 (레거시 settle_kcp.inc.php 동일 패턴)
-    const siteCd = isEasyPay ? (config.easy_pay_client_id ?? config.client_id) : config.client_id;
+    // 에스크로 테스트는 T0007, 간편결제 테스트는 S6729, 일반은 기본 site_cd
+    const siteCd = isEasyPay
+        ? (config.easy_pay_client_id ?? config.client_id)
+        : (config.use_escrow ? (config.escrow_client_id ?? config.client_id) : config.client_id);
 
     const fields: Record<string, string> = {
         site_cd: siteCd,
@@ -239,6 +243,12 @@ async function handlePcPayment(
     if (payMethod === '001000000000') {
         fields['vcnt_expire_term'] = String(config.vbank_expire_days ?? 3);
         fields['disp_tax_yn'] = 'N';
+    }
+
+    // 에스크로 결제 파라미터 (간편결제 제외)
+    if (config.use_escrow && !isEasyPay) {
+        fields['escw_used'] = 'Y';
+        fields['pay_mod'] = 'O';
     }
 
     // 간편결제 종류별 direct 파라미터 추가

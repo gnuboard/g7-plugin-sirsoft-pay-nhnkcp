@@ -1037,6 +1037,186 @@
                         ]
                     },
                     {
+                        "id": "escrow_settings_section",
+                        "type": "basic",
+                        "name": "Div",
+                        "props": {
+                            "className": "mt-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700"
+                        },
+                        "children": [
+                            {
+                                "type": "basic",
+                                "name": "Div",
+                                "props": {
+                                    "className": "px-6 py-4 border-b border-gray-200 dark:border-gray-700"
+                                },
+                                "children": [
+                                    {
+                                        "type": "basic",
+                                        "name": "Div",
+                                        "props": { "className": "flex items-center gap-2" },
+                                        "children": [
+                                            {
+                                                "type": "basic",
+                                                "name": "Icon",
+                                                "props": { "name": "shield-check", "className": "w-4 h-4 text-gray-600 dark:text-gray-400" }
+                                            },
+                                            {
+                                                "type": "basic",
+                                                "name": "H3",
+                                                "props": { "className": "text-base font-semibold text-gray-900 dark:text-gray-100" },
+                                                "text": "$t:sirsoft-pay_nhnkcp.settings.section_escrow"
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "type": "basic",
+                                        "name": "P",
+                                        "props": { "className": "mt-1 text-sm text-gray-500 dark:text-gray-400" },
+                                        "text": "$t:sirsoft-pay_nhnkcp.settings.section_escrow_hint"
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "basic",
+                                "name": "Div",
+                                "props": { "className": "p-6 space-y-4" },
+                                "children": [
+                                    {
+                                        "type": "composite",
+                                        "name": "ToggleField",
+                                        "props": {
+                                            "label": "$t:sirsoft-pay_nhnkcp.settings.use_escrow",
+                                            "hint": "$t:sirsoft-pay_nhnkcp.settings.use_escrow_hint",
+                                            "value": "{{_local.form.use_escrow ?? false}}",
+                                            "onChange": { "target": "local.form.use_escrow" }
+                                        }
+                                    },
+                                    {
+                                        "type": "composite",
+                                        "name": "TextField",
+                                        "if": "{{_local.form.use_escrow && _local.form.is_test_mode}}",
+                                        "props": {
+                                            "label": "$t:sirsoft-pay_nhnkcp.settings.escrow_test_site_cd",
+                                            "hint": "$t:sirsoft-pay_nhnkcp.settings.escrow_test_site_cd_hint",
+                                            "value": "{{_local.form.escrow_test_site_cd ?? 'T0007'}}",
+                                            "placeholder": "T0007",
+                                            "onChange": { "target": "local.form.escrow_test_site_cd" }
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "id": "escrow_notify_section",
+                        "type": "basic",
+                        "name": "Div",
+                        "if": "{{_local.form.use_escrow}}",
+                        "props": {
+                            "className": "mt-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-purple-200 dark:border-purple-800"
+                        },
+                        "children": [
+                            {
+                                "type": "basic",
+                                "name": "Div",
+                                "props": {
+                                    "className": "px-6 py-4 border-b border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 rounded-t-lg"
+                                },
+                                "children": [
+                                    {
+                                        "type": "basic",
+                                        "name": "Div",
+                                        "props": { "className": "flex items-center gap-2" },
+                                        "children": [
+                                            {
+                                                "type": "basic",
+                                                "name": "Icon",
+                                                "props": { "name": "bell", "className": "w-4 h-4 text-purple-600 dark:text-purple-400" }
+                                            },
+                                            {
+                                                "type": "basic",
+                                                "name": "H3",
+                                                "props": { "className": "text-base font-semibold text-purple-900 dark:text-purple-100" },
+                                                "text": "$t:sirsoft-pay_nhnkcp.settings.section_escrow_notify"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "basic",
+                                "name": "Div",
+                                "props": { "className": "p-6" },
+                                "children": [
+                                    {
+                                        "type": "basic",
+                                        "name": "P",
+                                        "props": { "className": "text-sm text-gray-600 dark:text-gray-400 mb-3" },
+                                        "text": "$t:sirsoft-pay_nhnkcp.settings.escrow_common_notify_hint"
+                                    },
+                                    {
+                                        "type": "basic",
+                                        "name": "Div",
+                                        "props": { "className": "flex items-center gap-2" },
+                                        "children": [
+                                            {
+                                                "type": "basic",
+                                                "name": "Input",
+                                                "props": {
+                                                    "type": "text",
+                                                    "readOnly": true,
+                                                    "value": "{{_local.vbankInfo?.escrow_common_notify_url ?? '/plugins/sirsoft-pay_nhnkcp/payment/escrow-common-notify'}}",
+                                                    "className": "flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 font-mono text-sm"
+                                                }
+                                            },
+                                            {
+                                                "type": "basic",
+                                                "name": "Button",
+                                                "props": {
+                                                    "className": "flex items-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium transition-colors whitespace-nowrap"
+                                                },
+                                                "actions": [
+                                                    {
+                                                        "type": "click",
+                                                        "handler": "sequence",
+                                                        "actions": [
+                                                            {
+                                                                "handler": "copyToClipboard",
+                                                                "params": {
+                                                                    "text": "{{_local.vbankInfo?.escrow_common_notify_url ?? '/plugins/sirsoft-pay_nhnkcp/payment/escrow-common-notify'}}"
+                                                                }
+                                                            },
+                                                            {
+                                                                "handler": "toast",
+                                                                "params": {
+                                                                    "type": "success",
+                                                                    "message": "$t:sirsoft-pay_nhnkcp.settings.escrow_common_notify_copied"
+                                                                }
+                                                            }
+                                                        ]
+                                                    }
+                                                ],
+                                                "children": [
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "Icon",
+                                                        "props": { "name": "copy", "className": "w-4 h-4" }
+                                                    },
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "Span",
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.copy"
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
                         "id": "footer_buttons",
                         "type": "basic",
                         "name": "Div",

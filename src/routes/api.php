@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Plugins\Sirsoft\PayNhnkcp\Controllers\AdminEscrowDeliveryController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\AdminTransactionController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\MobileApprovalController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\UserReceiptController;
@@ -26,16 +27,21 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
 Route::prefix('admin')->name('admin.')->middleware(['auth:sanctum', 'admin'])->group(function () {
     // 가상계좌 입금통보 URL 조회 (관리자 설정 페이지 표시용)
-    Route::get('/vbank-notify-url', function () {
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'url' => url('/plugins/sirsoft-pay_nhnkcp/payment/vbank-notify'),
-            ],
-        ]);
-    })->name('vbank.notify.url');
+    Route::get('/vbank-notify-url', fn () => response()->json([
+        'success' => true,
+        'data' => [
+            'url' => url('/plugins/sirsoft-pay_nhnkcp/payment/vbank-notify'),
+            'escrow_common_notify_url' => url('/plugins/sirsoft-pay_nhnkcp/payment/escrow-common-notify'),
+        ],
+    ]))->name('vbank.notify.url');
 
     // 주문번호로 거래 정보 조회 (레이아웃 확장 자동 로드용)
     Route::get('/orders/{orderNumber}/transaction-status', [AdminTransactionController::class, 'queryByOrder'])
         ->name('orders.transaction-status');
+
+    // 에스크로 배송 등록
+    Route::get('/orders/{orderNumber}/escrow-delivery', [AdminEscrowDeliveryController::class, 'formData'])
+        ->name('orders.escrow-delivery.form');
+    Route::post('/orders/{orderNumber}/escrow-delivery', [AdminEscrowDeliveryController::class, 'register'])
+        ->name('orders.escrow-delivery.register');
 });
