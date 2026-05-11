@@ -114,7 +114,7 @@ class PaymentCallbackController
             $isVbank = ($validated['use_pay_method'] ?? '') === 'VCNT'
                 || in_array($order->payment?->payment_method?->value, ['vbank', 'virtual_account'], true);
             if ($isVbank) {
-                return $this->handleVbankIssued($validated, $order, $encData, $encInfo, $ordrIdxx, $custIp);
+                return $this->handleVbankIssued($validated, $order, $encData, $encInfo, $ordrIdxx, $custIp, $request);
             }
 
             HookManager::doAction('sirsoft-pay_nhnkcp.payment.before_confirm', $order, $validated);
@@ -275,7 +275,12 @@ class PaymentCallbackController
      * 가상계좌 발급 처리
      *
      * authCallback에서 use_pay_method=VCNT일 때 호출됩니다.
-     * CLI로 계좌 정보를 확인한 뒤 order_meta에 저장하고 성공 페이지로 이동합니다.
+     *
+     * PC Standard Pay: enc_data/enc_info가 동봉되므로 CLI로 복호화하여 계좌 정보를 얻습니다.
+     * Mobile SmartPhone Pay: enc_data 없이 평문 필드(bankname/account/depositor/va_date)가
+     *   콜백 POST에 직접 포함되므로 CLI 호출을 건너뛰고 요청에서 직접 읽습니다.
+     *
+     * 어느 경로든 계좌 발급은 성공한 상태이므로 success URL로 리다이렉트합니다.
      * 실제 결제 완료(completePayment)는 입금 통보(vbankNotify) 시점에 처리됩니다.
      */
     private function handleVbankIssued(
@@ -285,37 +290,58 @@ class PaymentCallbackController
         string $encInfo,
         string $ordrIdxx,
         string $custIp,
+        Request $request,
     ): \Illuminate\Http\RedirectResponse {
-        // KCP 브라우저 콜백 res_cd=0000은 계좌 발급 성공을 의미.
-        // CLI 호출로 복호화된 계좌 정보를 가져오되, CLI 실패는 계좌 상세정보 조회 실패일 뿐
-        // 계좌 발급 자체는 성공이므로 success URL로 리다이렉트한다.
         $tno = $validated['tno'] ?? '';
         $pgResponse = [];
+        $isMobile = $encData === '' || $encInfo === '';
 
-        try {
-            $pgResponse = $this->apiService->approvePayment($encData, $encInfo, $ordrIdxx, $custIp);
-            $pgResCd = $pgResponse['res_cd'] ?? '';
+        if ($isMobile) {
+            // 모바일: 콜백 POST 의 평문 필드를 그대로 응답으로 취급
+            // KCP 변종 키 모두 대응 (bankname|bank_name, depositor|account_holder, va_date|vnbank_expire_date)
+            $pgResponse = [
+                'res_cd'    => $validated['res_cd'] ?? self::SUCCESS_RES_CD,
+                'tno'       => $tno,
+                'bankname'  => $request->input('bankname') ?? $request->input('bank_name'),
+                'account'   => $request->input('account'),
+                'depositor' => $request->input('depositor') ?? $request->input('account_holder'),
+                'va_date'   => $request->input('va_date') ?? $request->input('vnbank_expire_date'),
+            ];
 
-            if ($pgResCd === self::SUCCESS_RES_CD) {
-                $tno = $pgResponse['tno'] ?? $tno;
-                Log::info('KCP: vbank account issued via CLI', [
+            Log::info('KCP: vbank account issued via mobile callback (no CLI)', [
+                'ordr_idxx' => $ordrIdxx,
+                'tno'       => $tno,
+                'bankname'  => $pgResponse['bankname'],
+                'account'   => $pgResponse['account'],
+                'va_date'   => $pgResponse['va_date'],
+            ]);
+        } else {
+            // PC: CLI 호출로 복호화 — 실패해도 계좌 발급 자체는 성공이므로 진행
+            try {
+                $pgResponse = $this->apiService->approvePayment($encData, $encInfo, $ordrIdxx, $custIp);
+                $pgResCd = $pgResponse['res_cd'] ?? '';
+
+                if ($pgResCd === self::SUCCESS_RES_CD) {
+                    $tno = $pgResponse['tno'] ?? $tno;
+                    Log::info('KCP: vbank account issued via CLI', [
+                        'ordr_idxx' => $ordrIdxx,
+                        'tno' => $tno,
+                        'bankname' => $pgResponse['bankname'] ?? null,
+                        'account' => $pgResponse['account'] ?? null,
+                    ]);
+                } else {
+                    Log::warning('KCP: vbank CLI returned non-0000 — account still issued, proceeding to success', [
+                        'ordr_idxx' => $ordrIdxx,
+                        'res_cd' => $pgResCd,
+                        'res_msg' => $pgResponse['res_msg'] ?? '',
+                    ]);
+                }
+            } catch (\Exception $e) {
+                Log::warning('KCP: vbank CLI exception — account still issued, proceeding to success', [
                     'ordr_idxx' => $ordrIdxx,
-                    'tno' => $tno,
-                    'bank_name' => $pgResponse['bank_name'] ?? null,
-                    'account' => $pgResponse['account'] ?? null,
-                ]);
-            } else {
-                Log::warning('KCP: vbank CLI returned non-0000 — account still issued, proceeding to success', [
-                    'ordr_idxx' => $ordrIdxx,
-                    'res_cd' => $pgResCd,
-                    'res_msg' => $pgResponse['res_msg'] ?? '',
+                    'error' => $e->getMessage(),
                 ]);
             }
-        } catch (\Exception $e) {
-            Log::warning('KCP: vbank CLI exception — account still issued, proceeding to success', [
-                'ordr_idxx' => $ordrIdxx,
-                'error' => $e->getMessage(),
-            ]);
         }
 
         // 가상계좌 발급 정보를 OrderPayment vbank 전용 컬럼에 저장 (PENDING_PAYMENT 상태 유지)
@@ -323,7 +349,7 @@ class PaymentCallbackController
             $expireRaw = $pgResponse['va_date'] ?? null;
             $vbankDueAt = null;
             if ($expireRaw) {
-                // KCP va_date: YYYYMMDDHHMMSS (14자리)
+                // KCP va_date: YYYYMMDDHHMMSS (14자리) 또는 YYYYMMDD (8자리)
                 try {
                     $vbankDueAt = strlen($expireRaw) <= 8
                         ? Carbon::createFromFormat('Ymd', $expireRaw)->endOfDay()
@@ -340,6 +366,7 @@ class PaymentCallbackController
                 'vbank_holder'    => $pgResponse['depositor'] ?? null,
                 'vbank_due_at'    => $vbankDueAt,
                 'vbank_issued_at' => now(),
+                'payment_device'  => $isMobile ? 'mobile' : 'pc',
                 'payment_meta'    => $pgResponse ?: null,
             ], fn ($v) => $v !== null));
         } catch (\Exception $e) {
