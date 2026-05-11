@@ -9,6 +9,10 @@ interface PgPaymentData {
     customer_name?: string;
     customer_email?: string;
     customer_phone?: string;
+    /** 복합과세 분할용 — orderResponseInterceptor가 data.order 에서 주입 */
+    tax_amount?: number;
+    vat_amount?: number;
+    tax_free_amount?: number;
 }
 
 interface RequestPaymentParams {
@@ -217,6 +221,18 @@ async function handlePcPayment(
         pay_method: payMethod,
         Ret_URL: callbackUrl,
     };
+
+    // 비과세 금액이 있는 경우 복합과세 분할 필드 추가 (복합과세 사이트 코드 계약 가맹점 전용)
+    const taxFreeAmt = pgPaymentData.tax_free_amount ?? 0;
+    if (taxFreeAmt > 0) {
+        const taxTotalAmt = pgPaymentData.tax_amount ?? 0;
+        const vatAmt = pgPaymentData.vat_amount ?? 0;
+        const supplyAmt = taxTotalAmt - vatAmt; // 공급가액 (VAT 제외)
+        fields['tax_flag']      = 'TG03';
+        fields['comm_tax_mny']  = String(supplyAmt);
+        fields['comm_vat_mny']  = String(vatAmt);
+        fields['comm_free_mny'] = String(taxFreeAmt);
+    }
 
     // 간편결제 종류별 direct 파라미터 추가
     if (isEasyPay) {

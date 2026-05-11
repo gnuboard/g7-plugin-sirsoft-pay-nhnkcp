@@ -35,7 +35,12 @@ interface OrderCreateResponseBody {
     success?: boolean;
     message?: string;
     data?: {
-        order?: { order_number?: string };
+        order?: {
+            order_number?: string;
+            total_tax_amount?: number;
+            total_vat_amount?: number;
+            total_tax_free_amount?: number;
+        };
         redirect_url?: string;
         requires_pg_payment?: boolean;
         pg_provider?: string;
@@ -174,13 +179,22 @@ export function installOrderResponseInterceptor(): void {
 
         logger.info('intercepted order create response — opening PG popup');
 
+        // 주문 세금 정보 추출 — PC 결제창의 복합과세 분할 필드 전달용
+        const orderTax = data.order
+            ? {
+                tax_amount: data.order.total_tax_amount ?? 0,
+                vat_amount: data.order.total_vat_amount ?? 0,
+                tax_free_amount: data.order.total_tax_free_amount ?? 0,
+            }
+            : {};
+
         // 간편결제가 아닌 경우 요청 body의 pay_method를 pgPaymentData에 주입
         const enrichedPgPaymentData = (!originalPaymentMethod && modifiedInit?.body && typeof modifiedInit.body === 'string')
             ? (() => {
                 const pm = extractPaymentMethodFromBody(modifiedInit!.body as string);
-                return pm ? { ...pgPaymentData, pay_method: pm } : pgPaymentData;
+                return pm ? { ...pgPaymentData, pay_method: pm, ...orderTax } : { ...pgPaymentData, ...orderTax };
             })()
-            : pgPaymentData;
+            : { ...pgPaymentData, ...orderTax };
 
         void requestPaymentHandler({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any

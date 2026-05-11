@@ -6,6 +6,7 @@ namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
 use Plugins\Sirsoft\PayNhnkcp\Exceptions\NhnKcpApiException;
 use Plugins\Sirsoft\PayNhnkcp\Services\KcpSoapService;
 
@@ -47,6 +48,7 @@ class MobileApprovalController
 
     public function __construct(
         private readonly KcpSoapService $soapService,
+        private readonly OrderProcessingService $orderService,
     ) {}
 
     /**
@@ -102,10 +104,11 @@ class MobileApprovalController
                 'quotaopt' => '12',
                 'currency' => '410',
                 'approval_key' => $result['approval_key'],
+                ...$this->buildTaxFields($validated['order_number']),
             ];
 
             if ($isEasyPay && isset(self::EASY_PAY_DIRECT_FIELDS[$payMethodKey])) {
-                $fields = array_merge($fields, self::EASY_PAY_DIRECT_FIELDS[$payMethodKey]);
+                $fields = [...$fields, ...self::EASY_PAY_DIRECT_FIELDS[$payMethodKey]];
             }
 
             return response()->json([
@@ -122,5 +125,37 @@ class MobileApprovalController
                 'error' => $e->getMessage(),
             ], 422);
         }
+    }
+
+    /**
+     * 주문의 과세/비과세 분할 필드 반환 (복합과세 사이트 코드 계약 시 필요)
+     *
+     * 비과세 금액이 있는 경우에만 comm_tax_mny / comm_vat_mny / comm_free_mny 추가.
+     * 전액 과세라면 good_mny 만으로 KCP가 내부적으로 세금 계산.
+     *
+     * @return array<string, string>
+     */
+    private function buildTaxFields(string $orderNumber): array
+    {
+        $order = $this->orderService->findByOrderNumber($orderNumber);
+        if (! $order) {
+            return [];
+        }
+
+        $taxFreeAmt = (int) round((float) ($order->total_tax_free_amount ?? 0));
+        if ($taxFreeAmt <= 0) {
+            return [];
+        }
+
+        $taxTotalAmt = (int) round((float) ($order->total_tax_amount ?? 0));
+        $vatAmt = (int) round((float) ($order->total_vat_amount ?? 0));
+        $supplyAmt = $taxTotalAmt - $vatAmt; // 공급가액 (VAT 제외)
+
+        return [
+            'tax_flag'      => 'TG03',
+            'comm_tax_mny'  => (string) $supplyAmt,
+            'comm_vat_mny'  => (string) $vatAmt,
+            'comm_free_mny' => (string) $taxFreeAmt,
+        ];
     }
 }
