@@ -59,13 +59,13 @@ class KcpSoapService
     /**
      * KCP 모바일 결제 승인키 획득 (SOAP)
      *
-     * @param  string  $orderNumber  주문번호
-     * @param  string  $goodName     상품명
-     * @param  int     $amount       결제 금액
-     * @param  string  $payMethod    결제수단 코드 (CARD/BANK/MOBX/VCNT)
-     * @param  string  $retUrl       결제 결과 콜백 URL
-     * @param  bool    $isEasyPay    간편결제 여부 (site_cd 분기)
-     * @param  bool    $escrow       에스크로 여부
+     * @param  string  $orderNumber    주문번호
+     * @param  string  $goodName       상품명
+     * @param  int     $amount         결제 금액
+     * @param  string  $payMethod      결제수단 코드 (CARD/BANK/MOBX/VCNT)
+     * @param  string  $retUrl         결제 결과 콜백 URL
+     * @param  string  $payMethodKey   원본 결제수단 키 (nhnkcp_payco 등, site_cd 분기용)
+     * @param  bool    $escrow         에스크로 여부
      * @return array{approval_key: string, pay_url: string}
      *
      * @throws NhnKcpApiException
@@ -76,7 +76,7 @@ class KcpSoapService
         int $amount,
         string $payMethod,
         string $retUrl,
-        bool $isEasyPay = false,
+        string $payMethodKey = '',
         bool $escrow = false,
     ): array {
         $wsdlFile = $this->binDir . DIRECTORY_SEPARATOR . ($this->isTest ? self::WSDL_TEST : self::WSDL_LIVE);
@@ -85,7 +85,7 @@ class KcpSoapService
             throw new NhnKcpApiException('KCP WSDL 파일이 없습니다: ' . $wsdlFile);
         }
 
-        $siteCd = $isEasyPay ? $this->easyPaySiteCd : $this->siteCd;
+        $siteCd = $this->resolveSiteCd($payMethodKey);
 
         try {
             $soapClient = new SoapClient($wsdlFile, [
@@ -151,8 +151,25 @@ class KcpSoapService
         }
     }
 
-    public function getSiteCd(bool $isEasyPay = false): string
+    /**
+     * 결제수단 키에 따른 site_cd 반환
+     *
+     * 레거시(settle_kcp.inc.php)와 동일 규칙:
+     * - PAYCO만 간편결제 전용 site_cd(테스트: S6729) 사용
+     * - NaverPay/KakaoPay/ApplePay는 일반 site_cd(테스트: T0000) 사용
+     */
+    public function getSiteCd(string $payMethodKey = ''): string
     {
-        return $isEasyPay ? $this->easyPaySiteCd : $this->siteCd;
+        return $this->resolveSiteCd($payMethodKey);
+    }
+
+    private function resolveSiteCd(string $payMethodKey): string
+    {
+        // PAYCO만 전용 간편결제 site_cd 사용 (레거시 settle_kcp.inc.php 동일)
+        if ($payMethodKey === 'nhnkcp_payco') {
+            return $this->easyPaySiteCd;
+        }
+
+        return $this->siteCd;
     }
 }

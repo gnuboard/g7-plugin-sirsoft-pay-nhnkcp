@@ -82,13 +82,13 @@ class MobileApprovalController
                 amount: (int) $validated['amount'],
                 payMethod: $mobilePayMethod,
                 retUrl: $validated['ret_url'],
-                isEasyPay: $isEasyPay,
+                payMethodKey: $payMethodKey,
                 escrow: false,
             );
 
             $fields = [
                 'req_tx' => 'pay',
-                'site_cd' => $this->soapService->getSiteCd($isEasyPay),
+                'site_cd' => $this->soapService->getSiteCd($payMethodKey),
                 'ordr_idxx' => $validated['order_number'],
                 'pay_method' => $mobilePayMethod,
                 'good_mny' => (string) $validated['amount'],
