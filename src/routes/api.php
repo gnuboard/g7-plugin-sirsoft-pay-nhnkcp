@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\AdminEscrowDeliveryController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\AdminTransactionController;
+use Plugins\Sirsoft\PayNhnkcp\Controllers\HealthCheckController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\MobileApprovalController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\UserReceiptController;
 
@@ -44,4 +45,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth:sanctum', 'admin'])->g
         ->name('orders.escrow-delivery.form');
     Route::post('/orders/{orderNumber}/escrow-delivery', [AdminEscrowDeliveryController::class, 'register'])
         ->name('orders.escrow-delivery.register');
+
+    // 시스템 점검 (PC/모바일 결제 사전조건 진단 + 자동 chmod +x 복구)
+    Route::get('/health', [HealthCheckController::class, 'check'])
+        ->name('health');
 });
