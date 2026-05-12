@@ -132,9 +132,11 @@ class KcpSoapService
 
             $resCode = $response->return->baseResponseType->error->code ?? '9999';
             $rawMsg  = (string) ($response->return->baseResponseType->error->message ?? '연동 오류');
-            $resMsg  = mb_check_encoding($rawMsg, 'UTF-8')
-                ? $rawMsg
-                : mb_convert_encoding($rawMsg, 'UTF-8', 'EUC-KR');
+            // KCP SOAP 응답은 EUC-KR이지만, PHP SoapClient가 ISO-8859-1로 오인해
+            // UTF-8로 변환(Mojibake)한다. ISO-8859-1 역변환 후 EUC-KR로 재해석.
+            $latin1  = mb_convert_encoding($rawMsg, 'ISO-8859-1', 'UTF-8');
+            $fixed   = mb_convert_encoding($latin1, 'UTF-8', 'EUC-KR');
+            $resMsg  = ($fixed !== false && $fixed !== '') ? $fixed : $rawMsg;
 
             if ($resCode !== '0000') {
                 Log::warning('[nhnkcp] mobile SOAP approval error', [
