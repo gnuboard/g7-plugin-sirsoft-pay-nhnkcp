@@ -179,6 +179,10 @@ class PaymentCallbackController
                 $order->payment()->update(['is_escrow' => true]);
             }
 
+            // KCP가 실제로 결제를 처리했으므로 pg_provider를 nhnkcp로 보정
+            // (기본 PG가 타 PG일 때 주문이 해당 PG provider로 생성되는 경우 대비)
+            $order->payment()->update(['pg_provider' => 'nhnkcp']);
+
             return redirect($this->resolveSuccessUrl($ordrIdxx));
 
         } catch (PaymentAmountMismatchException $e) {
@@ -255,6 +259,8 @@ class PaymentCallbackController
                     'pg_raw_response' => $validated,
                 ],
             ], $goodMny);
+
+            $order->payment()->update(['pg_provider' => 'nhnkcp']);
 
             Log::info('KCP: vbank deposit confirmed', ['tno' => $tno, 'ordr_idxx' => $ordrIdxx, 'good_mny' => $goodMny]);
 
