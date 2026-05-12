@@ -75,7 +75,11 @@ async function injectOnOrderComplete(orderNumber: string): Promise<void> {
         const data = await fetchReceiptUrl(orderNumber);
         btn.disabled = false;
         btn.textContent = '영수증 조회';
-        if (data?.receipt_url) window.open(data.receipt_url, '_blank', 'noopener,noreferrer');
+        if (data) {
+            const KcpPopup = (window as unknown as Record<string, unknown>).KcpReceiptPopup as
+                (new (p: { url?: string; cash_url?: string }) => unknown) | undefined;
+            if (KcpPopup) new KcpPopup({ url: data.receipt_url ?? undefined });
+        }
     });
     receiptBtn.id = BTN_ID;
 
@@ -92,7 +96,11 @@ async function injectOnOrderComplete(orderNumber: string): Promise<void> {
             const data = await fetchReceiptUrl(orderNumber);
             btn.disabled = false;
             btn.textContent = '현금영수증 조회';
-            if (data?.cash_receipt_url) window.open(data.cash_receipt_url, '_blank', 'noopener,noreferrer');
+            if (data) {
+                const KcpPopup = (window as unknown as Record<string, unknown>).KcpReceiptPopup as
+                    (new (p: { url?: string; cash_url?: string }) => unknown) | undefined;
+                if (KcpPopup) new KcpPopup({ cash_url: data.cash_receipt_url ?? undefined });
+            }
         });
         cashBtn.id = cashBtnId;
         container.insertBefore(cashBtn, lastBtn);
@@ -107,7 +115,7 @@ function tryInject(): void {
     if (ocMatch) {
         void injectOnOrderComplete(ocMatch[1]);
     }
-    // 마이페이지 주문상세는 user_order_show.json extension이 처리하므로 여기서는 skip
+    // 마이페이지 주문상세는 mypageOrderShowInjector가 처리
 }
 
 export function installOrderCompleteReceiptInjector(): void {
