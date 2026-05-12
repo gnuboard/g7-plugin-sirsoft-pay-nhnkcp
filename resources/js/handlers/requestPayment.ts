@@ -210,10 +210,10 @@ async function handlePcPayment(
         ? '100000000000'
         : (KCP_PAY_METHOD[pgPaymentData.pay_method ?? 'card'] ?? '100000000000');
 
-    // 에스크로 테스트는 T0007, 간편결제 테스트는 S6729, 일반은 기본 site_cd
-    const siteCd = isEasyPay
+    // PAYCO 전용 테스트 site_cd (S6729), 그 외 간편결제·에스크로·일반은 각자 site_cd 사용
+    const siteCd = paymentMethod === 'nhnkcp_payco'
         ? (config.easy_pay_client_id ?? config.client_id)
-        : (config.use_escrow ? (config.escrow_client_id ?? config.client_id) : config.client_id);
+        : (config.use_escrow && !isEasyPay ? (config.escrow_client_id ?? config.client_id) : config.client_id);
 
     const fields: Record<string, string> = {
         site_cd: siteCd,
