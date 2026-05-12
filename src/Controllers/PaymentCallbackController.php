@@ -60,7 +60,7 @@ class PaymentCallbackController
         $validated = $request->validated();
 
         $resCd = $validated['res_cd'];
-        $resMsg = $validated['res_msg'] ?? '';
+        $resMsg = $this->decodeKcpMessage($validated['res_msg'] ?? '');
         $encData = $validated['enc_data'] ?? '';  // 모바일 취소 시 미포함
         $encInfo = $validated['enc_info'] ?? '';  // 모바일 취소 시 미포함
         $ordrIdxx = $validated['ordr_idxx'];
@@ -427,6 +427,21 @@ class PaymentCallbackController
         $path = $url === '' ? '/' : ($url[0] === '/' ? $url : '/' . $url);
 
         return $base . $path;
+    }
+
+    /**
+     * KCP 모바일 게이트웨이는 EUC-KR(CP949) 인코딩으로 res_msg를 POST.
+     * 유효한 UTF-8이 아니면 CP949로 간주하고 변환한다.
+     */
+    private function decodeKcpMessage(string $msg): string
+    {
+        if ($msg === '' || mb_check_encoding($msg, 'UTF-8')) {
+            return $msg;
+        }
+
+        $converted = mb_convert_encoding($msg, 'UTF-8', 'CP949');
+
+        return $converted !== false ? $converted : $msg;
     }
 
     private function detectDevice(Request $request): string
