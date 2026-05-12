@@ -2,6 +2,7 @@ import { handlerMap } from './handlers';
 import { installOrderResponseInterceptor } from './orderResponseInterceptor';
 import { installOrderCompleteReceiptInjector } from './orderCompleteReceiptInjector';
 import { installMypageOrderShowInjector } from './mypageOrderShowInjector';
+import { installCheckoutEasyPayInjector } from './checkoutEasyPayInjector';
 
 class KcpReceiptPopup {
     constructor(params: { url?: string; cash_url?: string }) {
@@ -94,6 +95,7 @@ function initPlugin(): void {
 installOrderResponseInterceptor();
 installOrderCompleteReceiptInjector();
 installMypageOrderShowInjector();
+installCheckoutEasyPayInjector();
 initPlugin();
 
 (window as Record<string, unknown>).__SirsoftNhnkcp = {

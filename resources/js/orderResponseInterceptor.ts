@@ -145,6 +145,19 @@ export function installOrderResponseInterceptor(): void {
             }
         }
 
+        // G7Core 로컬 상태 fallback — 간편결제 버튼 클릭 시 serverPaymentMethod='card'로
+        // 서버에 전달되어 요청 body에서 감지 불가인 경우 대비
+        if (!originalPaymentMethod) {
+            try {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const localPm = ((window as any).G7Core)?.state?.getLocal?.()?.paymentMethod;
+                if (typeof localPm === 'string' && localPm.startsWith(EASY_PAY_PREFIX)) {
+                    originalPaymentMethod = localPm;
+                    logger.info(`easy pay detected from local state: '${localPm}'`);
+                }
+            } catch { /* ignore */ }
+        }
+
         const response = await originalFetch(input, modifiedInit);
 
         let cloned: Response;
