@@ -300,12 +300,33 @@ async function handlePcPayment(
             const resMsg  = (form.elements as any)['res_msg']?.value ?? '';
 
             if (resCode === '0000') {
-                // 결제 성공 → Ret_URL로 POST 제출 (top window 이동)
-                form.action = callbackUrl;
-                form.method = 'POST';
-                form.target = '_top';
-                iframeWin.document.body.appendChild(form);
-                form.submit();
+                // GNU5 패턴(GetField): KCP 결과를 order_info에 병합 후 order_info를 POST.
+                // KakaoPay 등 direct 결제에서 KCP가 ordr_idxx 없는 새 폼을 전달하므로
+                // form을 그대로 제출하면 서버 검증 실패(invalid_params).
+                // order_info(우리 주문 필드 포함)를 기준으로 병합해야 한다.
+                const orderForm = iframeWin.document.forms.namedItem('order_info') as HTMLFormElement | null;
+                const targetForm = (orderForm && orderForm !== form) ? orderForm : form;
+
+                if (orderForm && orderForm !== form) {
+                    for (let i = 0; i < form.elements.length; i++) {
+                        const el = form.elements[i] as HTMLInputElement;
+                        if (!el.name) continue;
+                        let dest = orderForm.elements.namedItem(el.name) as HTMLInputElement | null;
+                        if (!dest) {
+                            dest = iframeWin.document.createElement('input') as HTMLInputElement;
+                            dest.type = 'hidden';
+                            dest.name = el.name;
+                            orderForm.appendChild(dest);
+                        }
+                        dest.value = el.value;
+                    }
+                }
+
+                targetForm.action = callbackUrl;
+                targetForm.method = 'POST';
+                targetForm.target = '_top';
+                iframeWin.document.body.appendChild(targetForm);
+                targetForm.submit();
             } else {
                 // 취소 또는 오류
                 cleanup();
