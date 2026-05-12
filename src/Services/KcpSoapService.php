@@ -131,7 +131,10 @@ class KcpSoapService
             ]);
 
             $resCode = $response->return->baseResponseType->error->code ?? '9999';
-            $resMsg = $response->return->baseResponseType->error->message ?? '연동 오류';
+            $rawMsg  = (string) ($response->return->baseResponseType->error->message ?? '연동 오류');
+            $resMsg  = mb_check_encoding($rawMsg, 'UTF-8')
+                ? $rawMsg
+                : mb_convert_encoding($rawMsg, 'UTF-8', 'EUC-KR');
 
             if ($resCode !== '0000') {
                 Log::warning('[nhnkcp] mobile SOAP approval error', [
