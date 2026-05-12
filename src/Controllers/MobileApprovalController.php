@@ -37,13 +37,21 @@ class MobileApprovalController
         'VCNT' => 'vcnt',
     ];
 
-    /** 간편결제별 direct 파라미터 */
+    /** 간편결제 direct 파라미터 기본값 (매 결제 시 초기화) */
+    private const EASY_PAY_DIRECT_DEFAULTS = [
+        'payco_direct'    => '',
+        'naverpay_direct' => 'A',
+        'kakaopay_direct' => 'A',
+        'applepay_direct' => 'A',
+    ];
+
+    /** 간편결제별 direct 파라미터 override (기본값 위에 덮어씀) */
     private const EASY_PAY_DIRECT_FIELDS = [
-        'nhnkcp_payco' => ['payco_direct' => 'Y'],
-        'nhnkcp_naverpay' => ['naverpay_direct' => 'Y'],
+        'nhnkcp_payco'          => ['payco_direct' => 'Y'],
+        'nhnkcp_naverpay'       => ['naverpay_direct' => 'Y'],
         'nhnkcp_naverpay_point' => ['naverpay_direct' => 'Y', 'naverpay_point_direct' => 'Y'],
-        'nhnkcp_kakaopay' => ['kakaopay_direct' => 'Y'],
-        'nhnkcp_applepay' => ['applepay_direct' => 'Y'],
+        'nhnkcp_kakaopay'       => ['kakaopay_direct' => 'Y'],
+        'nhnkcp_applepay'       => ['applepay_direct' => 'Y'],
     ];
 
     private const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
@@ -123,8 +131,12 @@ class MobileApprovalController
                 $fields['disp_tax_yn'] = 'N';
             }
 
-            if ($isEasyPay && isset(self::EASY_PAY_DIRECT_FIELDS[$payMethodKey])) {
-                $fields = [...$fields, ...self::EASY_PAY_DIRECT_FIELDS[$payMethodKey]];
+            if ($isEasyPay) {
+                // GNU5 규격: 모든 direct 파라미터를 기본값으로 초기화 후 선택된 수단만 Y로 덮어씀
+                $fields = [...$fields, ...self::EASY_PAY_DIRECT_DEFAULTS];
+                if (isset(self::EASY_PAY_DIRECT_FIELDS[$payMethodKey])) {
+                    $fields = [...$fields, ...self::EASY_PAY_DIRECT_FIELDS[$payMethodKey]];
+                }
             }
 
             return response()->json([

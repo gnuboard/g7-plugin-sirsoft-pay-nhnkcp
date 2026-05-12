@@ -254,9 +254,11 @@ async function handlePcPayment(
     // 간편결제: GNU5 규격과 동일하게 모든 direct 파라미터를 기본값("" 또는 "A")으로 초기화한 뒤
     // 선택된 수단만 "Y"로 덮어씀 — 초기값이 없으면 KCP가 이전 요청값을 재사용할 수 있음
     if (isEasyPay) {
-        fields['payco_direct']   = '';
+        // GNU5 규격: 모든 direct 파라미터를 기본값으로 초기화 후 선택된 수단만 Y로 덮어씀
+        fields['payco_direct']    = '';
         fields['naverpay_direct'] = 'A';
         fields['kakaopay_direct'] = 'A';
+        fields['applepay_direct'] = 'A';
         const directOverride = KCP_EASY_PAY_DIRECT[paymentMethod];
         if (directOverride) {
             Object.assign(fields, directOverride);
