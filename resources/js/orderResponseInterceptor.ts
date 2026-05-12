@@ -116,6 +116,8 @@ export function installOrderResponseInterceptor(): void {
     if (!w[ORIGINAL_FETCH_KEY]) {
         w[ORIGINAL_FETCH_KEY] = window.fetch.bind(window);
     }
+    // easy pay 요청 시 다른 PG 인터셉터(KG 이니시스 등)를 완전히 우회하는 원본 fetch
+    const browserFetch = w[ORIGINAL_FETCH_KEY] as typeof fetch;
 
     const originalFetch = window.fetch.bind(window);
 
@@ -158,7 +160,10 @@ export function installOrderResponseInterceptor(): void {
             } catch { /* ignore */ }
         }
 
-        const response = await originalFetch(input, modifiedInit);
+        // easy pay일 때 browserFetch(원본)를 사용해 KG 이니시스 등 다른 PG 인터셉터 우회
+        // 기본 PG가 KG 이니시스여도 NHN KCP 결제창이 열리도록 함
+        const fetchFn = originalPaymentMethod ? browserFetch : originalFetch;
+        const response = await fetchFn(input, modifiedInit);
 
         let cloned: Response;
         try {
@@ -180,11 +185,40 @@ export function installOrderResponseInterceptor(): void {
         const requiresPg = data.requires_pg_payment === true;
         const isNhnkcp = data.pg_provider === TARGET_PG_PROVIDER;
 
-        if (!requiresPg || !isNhnkcp) {
+        // 일반 결제: pg_provider가 nhnkcp이고 requires_pg_payment=true인 경우에만 처리
+        // 간편결제: pg_provider 무관하게 NHN KCP 처리 (기본 PG가 KG 이니시스여도 KCP 결제창 띄움)
+        if (!originalPaymentMethod && (!requiresPg || !isNhnkcp)) {
+            return response;
+        }
+        if (originalPaymentMethod && !data.order && !data.pg_payment_data) {
             return response;
         }
 
-        const pgPaymentData = data.pg_payment_data;
+        // pg_payment_data: 서버 응답에 포함되거나,
+        // 간편결제 + 기본 PG가 타 PG인 경우 data.order에서 직접 구성
+        let pgPaymentData = data.pg_payment_data;
+        if (!pgPaymentData && originalPaymentMethod && data.order) {
+            const orderData = data.order as Record<string, unknown>;
+            const options = orderData.options as Array<Record<string, unknown>> | undefined;
+            const firstName = (options?.[0]?.product_name as string | undefined) ?? String(orderData.order_number ?? '');
+            const orderName = (options?.length ?? 0) > 1
+                ? `${firstName} 외 ${(options?.length ?? 0) - 1}건`
+                : firstName;
+            pgPaymentData = {
+                order_number: orderData.order_number,
+                order_name: orderName,
+                amount: Math.floor(Number(orderData.total_amount ?? 0)),
+                currency: 'KRW',
+                customer_name: orderData.orderer_name ?? null,
+                customer_email: orderData.orderer_email ?? null,
+                customer_phone: String(orderData.orderer_phone ?? '').replace(/[^0-9]/g, ''),
+            };
+            logger.info('pg_payment_data constructed from order (기본 PG가 타 PG)', {
+                order_number: pgPaymentData.order_number,
+                amount: pgPaymentData.amount,
+            });
+        }
+
         if (!pgPaymentData) {
             logger.warn('nhnkcp order detected but pg_payment_data missing');
             return response;
