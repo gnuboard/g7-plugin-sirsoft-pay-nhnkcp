@@ -14,11 +14,21 @@ use Illuminate\Foundation\Http\FormRequest;
  */
 class EscrowCommonNotifyRequest extends FormRequest
 {
+    /**
+     * FormRequest 인가 — 외부 PG 웹훅이라 항상 true
+     *
+     * @return bool 항상 true
+     */
     public function authorize(): bool
     {
         return true;
     }
 
+    /**
+     * KCP 에스크로 통보 페이로드 검증 규칙
+     *
+     * @return array<string, mixed> Laravel 검증 규칙
+     */
     public function rules(): array
     {
         return [

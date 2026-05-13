@@ -88,7 +88,7 @@ class KcpSoapService
         $wsdlFile = $this->binDir . DIRECTORY_SEPARATOR . ($this->isTest ? self::WSDL_TEST : self::WSDL_LIVE);
 
         if (! file_exists($wsdlFile)) {
-            throw new NhnKcpApiException('KCP WSDL 파일이 없습니다: ' . $wsdlFile);
+            throw new NhnKcpApiException(__('sirsoft-pay_nhnkcp::messages.errors.wsdl_missing', ['file' => $wsdlFile]));
         }
 
         $siteCd = $this->resolveSiteCd($payMethodKey);
@@ -140,7 +140,7 @@ class KcpSoapService
                     'res_msg' => $resMsg,
                     'site_cd' => $siteCd,
                 ]);
-                throw new NhnKcpApiException("KCP 승인키 오류 [{$resCode}]: {$resMsg}");
+                throw new NhnKcpApiException(__('sirsoft-pay_nhnkcp::messages.errors.approval_key_error', ['code' => $resCode, 'message' => $resMsg]));
             }
 
             return [
@@ -153,22 +153,29 @@ class KcpSoapService
                 'order' => $orderNumber,
                 'error' => $e->getMessage(),
             ]);
-            throw new NhnKcpApiException('KCP SOAP 연동 오류: ' . $e->getMessage(), 0, $e);
+            throw new NhnKcpApiException(__('sirsoft-pay_nhnkcp::messages.errors.soap_error', ['message' => $e->getMessage()]), 0, $e);
         }
     }
 
     /**
      * 결제수단 키에 따른 site_cd 반환
      *
-     * 레거시(settle_kcp.inc.php)와 동일 규칙:
-     * - PAYCO만 간편결제 전용 site_cd(테스트: S6729) 사용
-     * - NaverPay/KakaoPay/ApplePay는 일반 site_cd(테스트: T0000) 사용
+     * 레거시 settle_kcp.inc.php 규칙: PAYCO만 간편결제 전용 site_cd(테스트: S6729) 사용,
+     * NaverPay/KakaoPay/ApplePay 는 일반 site_cd(테스트: T0000) 사용.
+     *
+     * @param  string  $payMethodKey  결제수단 키 (nhnkcp_payco / nhnkcp_naverpay 등)
+     * @return string KCP site_cd
      */
     public function getSiteCd(string $payMethodKey = ''): string
     {
         return $this->resolveSiteCd($payMethodKey);
     }
 
+    /**
+     * 에스크로 전용 site_cd 반환
+     *
+     * @return string 에스크로 전용 KCP site_cd
+     */
     public function getEscrowSiteCd(): string
     {
         return $this->escrowSiteCd;

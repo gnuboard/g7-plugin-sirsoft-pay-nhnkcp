@@ -68,6 +68,14 @@ class MobileApprovalController
      *
      * @return JsonResponse{ success: true, data: { pay_url, fields } }
      */
+    /**
+     * 모바일 결제 승인키 발급 (SOAP)
+     *
+     * KCP 모바일 결제창 진입 전 SOAP 으로 승인키 + payUrl 발급.
+     *
+     * @param  Request  $request  주문/결제 메타
+     * @return JsonResponse approval_key + pay_url
+     */
     public function getApprovalKey(Request $request): JsonResponse
     {
         $validated = $request->validate([
