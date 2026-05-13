@@ -61,6 +61,7 @@ interface MockDepositInfo {
     account_no?: string;
     notify_url?: string;
     mock_url?: string;
+    is_admin_view?: boolean;
 }
 
 async function fetchMockDepositInfo(orderNumber: string): Promise<MockDepositInfo | null> {
@@ -144,6 +145,14 @@ function buildMockDepositBlock(info: MockDepositInfo): HTMLElement {
 
     wrap.appendChild(header);
     wrap.appendChild(form);
+
+    if (info.is_admin_view) {
+        const adminNotice = document.createElement('p');
+        adminNotice.className = 'mt-2 text-xs text-center text-orange-500 dark:text-orange-400 font-medium';
+        adminNotice.textContent = '관리자에게만 출력되는 내용';
+        wrap.appendChild(adminNotice);
+    }
+
     return wrap;
 }
 

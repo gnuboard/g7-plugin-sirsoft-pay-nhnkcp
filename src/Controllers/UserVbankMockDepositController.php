@@ -43,7 +43,14 @@ class UserVbankMockDepositController
 
         $user = $request->user();
 
-        if (! $user || (int) $order->user_id !== (int) $user->id) {
+        if (! $user) {
+            return response()->json(['available' => false]);
+        }
+
+        $isAdmin = method_exists($user, 'isAdmin') && $user->isAdmin();
+        $isOwner = (int) $order->user_id === (int) $user->id;
+
+        if (! $isAdmin && ! $isOwner) {
             return response()->json(['available' => false]);
         }
 
@@ -67,11 +74,12 @@ class UserVbankMockDepositController
             ?? (is_array($meta) ? ($meta['tno'] ?? '') : '');
 
         return response()->json([
-            'available'  => true,
-            'trade_no'   => $tradeNo,
-            'account_no' => $payment->vbank_number,
-            'notify_url' => url(self::VBANK_NOTIFY_PATH),
-            'mock_url'   => self::KCP_TEST_MOCK_URL,
+            'available'      => true,
+            'trade_no'       => $tradeNo,
+            'account_no'     => $payment->vbank_number,
+            'notify_url'     => url(self::VBANK_NOTIFY_PATH),
+            'mock_url'       => self::KCP_TEST_MOCK_URL,
+            'is_admin_view'  => $isAdmin,
         ]);
     }
 }
