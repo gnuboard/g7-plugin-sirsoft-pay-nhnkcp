@@ -263,7 +263,21 @@ function buildReceiptRow(orderNumber: string): HTMLElement {
 
 async function tryInject(orderNumber: string): Promise<boolean> {
     const orderData = getOrderFromState(orderNumber);
-    if (!orderData) return false; // 데이터 로딩 중 → 재시도
+
+    if (!orderData) {
+        // ctx.order가 null — 관리자가 타인 주문 열람 시 mypage API 404로 상태 없음.
+        // 컨테이너가 렌더링됐으면 모의입금 API만 직접 시도 후 종료.
+        if (!document.getElementById(MOCK_DEPOSIT_ID)) {
+            const container = findPaymentRowsContainer();
+            if (!container) return false; // 컨테이너 미렌더링 → 재시도
+            const info = await fetchMockDepositInfo(orderNumber);
+            if (info?.available) {
+                container.appendChild(buildMockDepositBlock(info));
+                console.info(`[${PLUGIN_ID}] mock deposit form injected on mypage order show`);
+            }
+        }
+        return true;
+    }
 
     const { payment } = orderData;
     if (!payment || payment.pg_provider !== 'nhnkcp') return true; // nhnkcp 아님
