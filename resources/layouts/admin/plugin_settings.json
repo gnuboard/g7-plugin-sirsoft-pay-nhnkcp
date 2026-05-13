@@ -90,7 +90,7 @@
                                                 "name": "Icon",
                                                 "props": {
                                                     "name": "{{health.data.summary.error_count > 0 ? 'triangle-exclamation' : (health.data.summary.warning_count > 0 ? 'circle-info' : 'circle-check')}}",
-                                                    "className": "{{health.data.summary.error_count > 0 ? 'w-5 h-5 text-red-600' : (health.data.summary.warning_count > 0 ? 'w-5 h-5 text-amber-500' : 'w-5 h-5 text-green-600')}}"
+                                                    "className": "{{health.data.summary.error_count > 0 ? 'w-5 h-5 text-red-600 dark:text-red-400' : (health.data.summary.warning_count > 0 ? 'w-5 h-5 text-amber-500 dark:text-amber-400' : 'w-5 h-5 text-green-600 dark:text-green-400')}}"
                                                 }
                                             },
                                             {
@@ -172,7 +172,7 @@
                                                         "name": "Icon",
                                                         "props": {
                                                             "name": "{{health.data.summary.pc_payment_ready ? 'circle-check' : 'circle-xmark'}}",
-                                                            "className": "{{health.data.summary.pc_payment_ready ? 'w-4 h-4 text-green-600' : 'w-4 h-4 text-red-600'}}"
+                                                            "className": "{{health.data.summary.pc_payment_ready ? 'w-4 h-4 text-green-600 dark:text-green-400' : 'w-4 h-4 text-red-600 dark:text-red-400'}}"
                                                         }
                                                     },
                                                     {
@@ -217,7 +217,7 @@
                                                         "name": "Icon",
                                                         "props": {
                                                             "name": "{{health.data.summary.mobile_payment_ready ? 'circle-check' : 'circle-xmark'}}",
-                                                            "className": "{{health.data.summary.mobile_payment_ready ? 'w-4 h-4 text-green-600' : 'w-4 h-4 text-red-600'}}"
+                                                            "className": "{{health.data.summary.mobile_payment_ready ? 'w-4 h-4 text-green-600 dark:text-green-400' : 'w-4 h-4 text-red-600 dark:text-red-400'}}"
                                                         }
                                                     },
                                                     {
@@ -262,7 +262,7 @@
                                                         "name": "Icon",
                                                         "props": {
                                                             "name": "{{health.data.summary.mobile_vbank_only_ready ? 'circle-check' : 'circle-xmark'}}",
-                                                            "className": "{{health.data.summary.mobile_vbank_only_ready ? 'w-4 h-4 text-green-600' : 'w-4 h-4 text-red-600'}}"
+                                                            "className": "{{health.data.summary.mobile_vbank_only_ready ? 'w-4 h-4 text-green-600 dark:text-green-400' : 'w-4 h-4 text-red-600 dark:text-red-400'}}"
                                                         }
                                                     },
                                                     {
@@ -316,7 +316,7 @@
                                                         "name": "Icon",
                                                         "props": {
                                                             "name": "{{check.status === 'ok' ? 'circle-check' : (check.status === 'fixed' ? 'wrench' : (check.status === 'warning' ? 'circle-info' : 'circle-xmark'))}}",
-                                                            "className": "{{check.status === 'ok' ? 'w-5 h-5 text-green-600 mt-0.5' : (check.status === 'fixed' ? 'w-5 h-5 text-blue-600 mt-0.5' : (check.status === 'warning' ? 'w-5 h-5 text-amber-500 mt-0.5' : 'w-5 h-5 text-red-600 mt-0.5'))}}"
+                                                            "className": "{{check.status === 'ok' ? 'w-5 h-5 text-green-600 dark:text-green-400 mt-0.5' : (check.status === 'fixed' ? 'w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5' : (check.status === 'warning' ? 'w-5 h-5 text-amber-500 dark:text-amber-400 mt-0.5' : 'w-5 h-5 text-red-600 dark:text-red-400 mt-0.5'))}}"
                                                         }
                                                     },
                                                     {
@@ -410,7 +410,7 @@
                                         "name": "Icon",
                                         "props": {
                                             "name": "triangle-exclamation",
-                                            "className": "w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5"
+                                            "className": "w-5 h-5 text-red-600 dark:text-red-400 dark:text-red-400 flex-shrink-0 mt-0.5"
                                         }
                                     },
                                     {

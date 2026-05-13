@@ -27,6 +27,15 @@ class UserVbankMockDepositController
         private readonly OrderProcessingService $orderService,
     ) {}
 
+    /**
+     * 테스트 모드 가상계좌 모의입금 처리 화면 데이터
+     *
+     * 테스트 환경에서 가상계좌 입금을 시뮬레이션할 수 있도록 폼 데이터 반환.
+     *
+     * @param  Request  $request  인증된 사용자 요청
+     * @param  string  $orderNumber  주문번호
+     * @return JsonResponse 가상계좌 폼 데이터 또는 404
+     */
     public function show(Request $request, string $orderNumber): JsonResponse
     {
         $settings = $this->pluginSettingsService->get(self::PLUGIN_IDENTIFIER) ?? [];

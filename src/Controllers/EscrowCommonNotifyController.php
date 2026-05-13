@@ -28,6 +28,14 @@ class EscrowCommonNotifyController
         private readonly OrderProcessingService $orderService,
     ) {}
 
+    /**
+     * KCP 에스크로 통보 처리 (공통 webhook)
+     *
+     * KCP 가 직접 호출하는 에스크로 상태 변경 통보. 응답은 항상 200 + "OK" (text/plain).
+     *
+     * @param  EscrowCommonNotifyRequest  $request  검증된 통보 페이로드
+     * @return Response 항상 200 + "OK"
+     */
     public function handle(EscrowCommonNotifyRequest $request): Response
     {
         $validated = $request->validated();

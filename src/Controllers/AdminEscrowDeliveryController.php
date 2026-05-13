@@ -45,6 +45,14 @@ class AdminEscrowDeliveryController extends AdminBaseController
     /**
      * 배송등록 폼 데이터 반환 (주소 자동완성 및 기등록 배송 이력 포함)
      */
+    /**
+     * 에스크로 배송 등록 폼 초기 데이터 조회
+     *
+     * 어드민 에스크로 배송 등록 화면에서 주문 정보 + 기본 배송지/수령인을 미리 채울 수 있도록 반환.
+     *
+     * @param  string  $orderNumber  주문번호
+     * @return JsonResponse 폼 초기 데이터 또는 404
+     */
     public function formData(string $orderNumber): JsonResponse
     {
         $payment = $this->findEscrowPayment($orderNumber);
@@ -85,6 +93,15 @@ class AdminEscrowDeliveryController extends AdminBaseController
 
     /**
      * KCP에 배송정보 등록 (CLI mod_type=STE1)
+     */
+    /**
+     * 에스크로 배송 등록 API 호출
+     *
+     * KCP 에스크로 API 로 배송 정보(택배사/송장번호/수령인 등) 등록. 등록 완료 시 구매확정 안내 자동 발송.
+     *
+     * @param  Request  $request  배송 정보 폼
+     * @param  string  $orderNumber  주문번호
+     * @return JsonResponse 등록 결과
      */
     public function register(Request $request, string $orderNumber): JsonResponse
     {
