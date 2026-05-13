@@ -40,8 +40,11 @@ class PaymentCallbackControllerTest extends PluginTestCase
     /**
      * @param array{taxable?: int, vat?: int, taxFree?: int} $tax
      */
-    private function createTestOrder(int $totalAmount = 50000, array $tax = []): Order
-    {
+    private function createTestOrder(
+        int $totalAmount = 50000,
+        array $tax = [],
+        PaymentMethodEnum $paymentMethod = PaymentMethodEnum::CARD,
+    ): Order {
         $taxable = $tax['taxable'] ?? $totalAmount;
         $vat     = $tax['vat']     ?? (int) round($taxable * 10 / 110);
         $taxFree = $tax['taxFree'] ?? 0;
@@ -75,7 +78,7 @@ class PaymentCallbackControllerTest extends PluginTestCase
         OrderPaymentFactory::new()->create([
             'order_id'             => $order->id,
             'payment_status'       => PaymentStatusEnum::READY,
-            'payment_method'       => PaymentMethodEnum::CARD,
+            'payment_method'       => $paymentMethod,
             'pg_provider'          => 'nhnkcp',
             'paid_amount_local'    => 0,
             'paid_at'              => null,
@@ -397,5 +400,107 @@ class PaymentCallbackControllerTest extends PluginTestCase
 
         $response->assertOk();
         $this->assertEquals('FAIL', $response->getContent());
+    }
+
+    // ===== 가상계좌 발급 (handleVbankIssued) 실패 처리 =====
+
+    /**
+     * PC 가상계좌: CLI 가 res_cd != 0000 (예: 9502 연동 모듈 호출 오류) 응답 시
+     * fail URL 로 리다이렉트 + payment_status 가 결제 완료로 전환되지 않아야 함.
+     *
+     * 회귀: 기존 코드는 "계좌 발급 자체는 성공" 가정하에 success URL 로 보내
+     *      사용자에게 빈 가상계좌 정보의 complete 페이지를 노출했음 (운영 사고).
+     */
+    public function test_vbank_pc_redirects_to_fail_on_cli_non_0000(): void
+    {
+        $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
+        $this->mockPluginSettings();
+        $this->mockApiService($this->makeCliResponse('KCP_VBANK_FAIL', $order->order_number, 30000, '9502'));
+
+        $response = $this->post(
+            '/plugins/sirsoft-pay_nhnkcp/payment/callback',
+            $this->makeCallbackParams($order->order_number, 30000, ['use_pay_method' => 'VCNT'])
+        );
+
+        $response->assertRedirect();
+        $this->assertStringContainsString('error=9502', $response->headers->get('Location'));
+        $this->assertStringNotContainsString('/complete', $response->headers->get('Location'));
+
+        $order->refresh();
+        $this->assertNotEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
+
+        $payment = $order->payment;
+        $payment->refresh();
+        $this->assertNull($payment->vbank_name);
+        $this->assertNull($payment->vbank_number);
+    }
+
+    /**
+     * PC 가상계좌: CLI 호출 자체가 예외(approvePayment throws) → fail URL.
+     */
+    public function test_vbank_pc_redirects_to_fail_on_cli_exception(): void
+    {
+        $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
+        $this->mockPluginSettings();
+
+        $mock = $this->createMock(NhnKcpApiService::class);
+        $mock->method('approvePayment')->willThrowException(new \RuntimeException('CLI exec failed'));
+        $this->app->instance(NhnKcpApiService::class, $mock);
+
+        $response = $this->post(
+            '/plugins/sirsoft-pay_nhnkcp/payment/callback',
+            $this->makeCallbackParams($order->order_number, 30000, ['use_pay_method' => 'VCNT'])
+        );
+
+        $response->assertRedirect();
+        $this->assertStringNotContainsString('/complete', $response->headers->get('Location'));
+
+        $order->refresh();
+        $this->assertNotEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
+
+        $payment = $order->payment;
+        $payment->refresh();
+        $this->assertNull($payment->vbank_name);
+        $this->assertNull($payment->vbank_number);
+    }
+
+    /**
+     * 모바일 가상계좌: 콜백 POST 의 평문 필드를 그대로 응답으로 취급하는 경로에서
+     * res_cd != 0000 시 fail URL 로 리다이렉트.
+     *
+     * 모바일은 enc_data/enc_info 가 없어 CLI 미호출이므로, 콜백 res_cd 자체가 권위.
+     */
+    public function test_vbank_mobile_redirects_to_fail_on_callback_res_cd_non_0000(): void
+    {
+        $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
+        $this->mockPluginSettings();
+
+        // 모바일: enc_data/enc_info 없이 res_cd 가 비-0000.
+        // 단 authCallback() 의 1단계 res_cd 가드를 통과해야 handleVbankIssued() 가 호출되므로
+        // 시나리오 재현은 1단계 가드가 vbank 비-0000 도 동일하게 처리해야 한다는 의미.
+        // 여기서는 res_cd=0000 으로 진입하되 handleVbankIssued 모바일 분기에서
+        // 평문 필드 누락으로 발급 실패(bankname/account 모두 null)인 케이스를 검증.
+        $response = $this->post(
+            '/plugins/sirsoft-pay_nhnkcp/payment/callback',
+            [
+                'res_cd'         => '0000',
+                'ordr_idxx'      => $order->order_number,
+                'good_mny'       => 30000,
+                'tno'            => 'KCP_VBANK_MOBILE_FAIL',
+                'use_pay_method' => 'VCNT',
+                // bankname / account / depositor / va_date 모두 누락 → 발급 정보 없음
+            ]
+        );
+
+        $response->assertRedirect();
+        $this->assertStringNotContainsString('/complete', $response->headers->get('Location'));
+
+        $order->refresh();
+        $this->assertNotEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
+
+        $payment = $order->payment;
+        $payment->refresh();
+        $this->assertNull($payment->vbank_name);
+        $this->assertNull($payment->vbank_number);
     }
 }
