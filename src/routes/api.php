@@ -7,6 +7,7 @@ use Plugins\Sirsoft\PayNhnkcp\Controllers\AdminTransactionController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\HealthCheckController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\MobileApprovalController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\UserReceiptController;
+use Plugins\Sirsoft\PayNhnkcp\Controllers\UserVbankMockDepositController;
 
 /*
 |--------------------------------------------------------------------------
@@ -21,6 +22,10 @@ use Plugins\Sirsoft\PayNhnkcp\Controllers\UserReceiptController;
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/user/orders/{orderNumber}/receipt', [UserReceiptController::class, 'show'])
         ->name('user.orders.receipt');
+
+    // 테스트 모드 가상계좌 모의입금 정보 (입금대기 상태일 때만 데이터 반환)
+    Route::get('/user/orders/{orderNumber}/vbank-mock-deposit-info', [UserVbankMockDepositController::class, 'show'])
+        ->name('user.orders.vbank-mock-deposit-info');
 
     // 모바일 결제 승인키 획득 (KCP SmartPhone Pay SOAP)
     Route::post('/mobile/approval-key', [MobileApprovalController::class, 'getApprovalKey'])

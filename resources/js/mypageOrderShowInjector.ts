@@ -2,6 +2,7 @@ const PLUGIN_ID = 'sirsoft-pay_nhnkcp';
 const FLAG = '__kcpMpShowInjectorInstalled';
 const VBANK_ID = 'kcp-mp-vbank-row';
 const ROW_ID = 'kcp-mp-receipt-row';
+const MOCK_DEPOSIT_ID = 'kcp-mp-mock-deposit';
 
 const ORDER_SHOW_RE = /^\/mypage\/orders\/([^/]+)$/;
 
@@ -52,6 +53,98 @@ async function fetchReceiptUrls(orderNumber: string): Promise<{ receipt_url?: st
     } catch {
         return null;
     }
+}
+
+interface MockDepositInfo {
+    available: boolean;
+    trade_no?: string;
+    account_no?: string;
+    notify_url?: string;
+    mock_url?: string;
+}
+
+async function fetchMockDepositInfo(orderNumber: string): Promise<MockDepositInfo | null> {
+    const token = getToken();
+    if (!token) return null;
+    try {
+        const res = await fetch(`/api/plugins/${PLUGIN_ID}/user/orders/${orderNumber}/vbank-mock-deposit-info`, {
+            headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+        });
+        if (!res.ok) return null;
+        return (await res.json()) as MockDepositInfo;
+    } catch {
+        return null;
+    }
+}
+
+function buildMockDepositBlock(info: MockDepositInfo): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.id = MOCK_DEPOSIT_ID;
+    wrap.className = 'pt-4 mt-2 border-t border-dashed border-orange-300 dark:border-orange-700';
+
+    const header = document.createElement('div');
+    header.className = 'flex items-center gap-2 mb-3';
+
+    const badge = document.createElement('span');
+    badge.className = 'inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 border border-orange-300 dark:border-orange-700';
+    badge.textContent = 'TEST';
+
+    const title = document.createElement('p');
+    title.className = 'text-sm font-semibold text-orange-700 dark:text-orange-300';
+    title.textContent = '모의입금처리';
+
+    header.appendChild(badge);
+    header.appendChild(title);
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = info.mock_url ?? '';
+    form.target = '_blank';
+    form.className = 'space-y-2';
+
+    const fields: Array<{ label: string; name: string; value: string; editable?: boolean }> = [
+        { label: 'KCP 거래번호', name: 'e_trade_no', value: info.trade_no ?? '' },
+        { label: '입금계좌',    name: 'deposit_no',  value: info.account_no ?? '' },
+        { label: '입금자명',    name: 'req_name',    value: 'NHN KCP', editable: true },
+        { label: '입금통보 URL', name: 'noti_url',   value: info.notify_url ?? '' },
+    ];
+
+    for (const f of fields) {
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-2 text-sm';
+
+        const lbl = document.createElement('span');
+        lbl.className = 'w-28 flex-shrink-0 text-gray-500 dark:text-gray-400 text-xs';
+        lbl.textContent = f.label;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.name = f.name;
+        input.value = f.value;
+        input.readOnly = !f.editable;
+        input.className = f.editable
+            ? 'flex-1 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono'
+            : 'flex-1 px-2 py-1 text-xs border border-gray-200 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-mono';
+
+        row.appendChild(lbl);
+        row.appendChild(input);
+        form.appendChild(row);
+    }
+
+    const submitRow = document.createElement('div');
+    submitRow.className = 'pt-1';
+
+    const btn = document.createElement('button');
+    btn.type = 'submit';
+    btn.className = 'w-full py-1.5 text-xs font-semibold rounded border border-orange-400 dark:border-orange-600 bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-colors';
+    btn.textContent = '입금통보 테스트';
+
+    submitRow.appendChild(btn);
+    form.appendChild(submitRow);
+
+    wrap.appendChild(header);
+    wrap.appendChild(form);
+    return wrap;
 }
 
 function findPaymentRowsContainer(): Element | null {
@@ -168,11 +261,15 @@ async function tryInject(orderNumber: string): Promise<boolean> {
 
     const needsVbank = payment.payment_method === 'vbank' && !!payment.vbank_name;
     const needsReceipt = !!payment.transaction_id;
+    // 가상계좌 계좌번호가 발급된 경우 API로 모의입금 가능 여부 확인 (tno는 서버에서 fallback)
+    const mightNeedMock = payment.payment_method === 'vbank' && !!payment.vbank_number;
 
-    // 필요한 요소가 이미 모두 DOM에 존재하면 완료
-    const vbankDone = !needsVbank || !!document.getElementById(VBANK_ID);
-    const receiptDone = !needsReceipt || !!document.getElementById(ROW_ID);
-    if (vbankDone && receiptDone) return true;
+    const vbankDone    = !needsVbank    || !!document.getElementById(VBANK_ID);
+    const receiptDone  = !needsReceipt  || !!document.getElementById(ROW_ID);
+    // 모의입금은 API 결과에 따라 달라지므로 DOM에 없으면 매번 체크
+    const mockDone     = !mightNeedMock || !!document.getElementById(MOCK_DEPOSIT_ID);
+
+    if (vbankDone && receiptDone && mockDone) return true;
 
     const container = findPaymentRowsContainer();
     if (!container) return false; // DOM 미렌더링 → 재시도
@@ -180,13 +277,24 @@ async function tryInject(orderNumber: string): Promise<boolean> {
     if (!document.getElementById(VBANK_ID) && needsVbank) {
         container.appendChild(buildVbankInfoBlock(payment, orderData.total_amount_formatted ?? ''));
         console.info(`[${PLUGIN_ID}] vbank info injected on mypage order show`);
-        return false; // 다음 폴에서 DOM 잔존 여부 재확인
+        return false;
     }
 
     if (!document.getElementById(ROW_ID) && needsReceipt) {
         container.appendChild(buildReceiptRow(orderNumber));
         console.info(`[${PLUGIN_ID}] receipt button injected on mypage order show`);
-        return false; // 다음 폴에서 DOM 잔존 여부 재확인
+        return false;
+    }
+
+    if (!document.getElementById(MOCK_DEPOSIT_ID) && mightNeedMock) {
+        const info = await fetchMockDepositInfo(orderNumber);
+        if (info?.available) {
+            container.appendChild(buildMockDepositBlock(info));
+            console.info(`[${PLUGIN_ID}] mock deposit form injected on mypage order show`);
+        } else {
+            // 테스트 모드 아님 or 조건 불충족 — 더 이상 시도 불필요
+            return true;
+        }
     }
 
     return true;
