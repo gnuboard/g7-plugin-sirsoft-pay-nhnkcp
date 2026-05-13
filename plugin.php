@@ -90,6 +90,12 @@ class Plugin extends AbstractPlugin
                     'en' => 'Supports relative paths or full URLs. Error details are appended as query parameters.',
                 ],
             ],
+            'easy_pay_allow_with_other_pg' => ['type' => 'boolean', 'default' => false],
+            'easy_pay_payco'               => ['type' => 'boolean', 'default' => false],
+            'easy_pay_naverpay'            => ['type' => 'boolean', 'default' => false],
+            'easy_pay_naverpay_point'      => ['type' => 'boolean', 'default' => false],
+            'easy_pay_kakaopay'            => ['type' => 'boolean', 'default' => false],
+            'easy_pay_applepay'            => ['type' => 'boolean', 'default' => false],
         ];
     }
 
@@ -103,6 +109,12 @@ class Plugin extends AbstractPlugin
             'live_site_key' => '',
             'redirect_success_url' => '/shop/orders/{orderId}/complete',
             'redirect_fail_url' => '/shop/checkout',
+            'easy_pay_allow_with_other_pg' => false,
+            'easy_pay_payco'               => false,
+            'easy_pay_naverpay'            => false,
+            'easy_pay_naverpay_point'      => false,
+            'easy_pay_kakaopay'            => false,
+            'easy_pay_applepay'            => false,
         ];
     }
 

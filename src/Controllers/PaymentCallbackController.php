@@ -30,6 +30,9 @@ class PaymentCallbackController
 
     private const SUCCESS_RES_CD = '0000';
 
+    // 사용자가 결제창을 직접 닫은 취소 코드 — 조용히 체크아웃으로 복귀
+    private const CANCEL_RES_CODES = ['3001', '3000', '7777', ''];
+
     public function __construct(
         private readonly OrderProcessingService $orderService,
         private readonly PluginSettingsService $pluginSettingsService,
@@ -57,9 +60,9 @@ class PaymentCallbackController
         $validated = $request->validated();
 
         $resCd = $validated['res_cd'];
-        $resMsg = $validated['res_msg'] ?? '';
-        $encData = $validated['enc_data'];
-        $encInfo = $validated['enc_info'];
+        $resMsg = $this->decodeKcpMessage($validated['res_msg'] ?? '');
+        $encData = $validated['enc_data'] ?? '';  // 모바일 취소 시 미포함
+        $encInfo = $validated['enc_info'] ?? '';  // 모바일 취소 시 미포함
         $ordrIdxx = $validated['ordr_idxx'];
         $goodMny = isset($validated['good_mny']) ? (int) $validated['good_mny'] : 0;
         $custIp = $request->ip() ?? '127.0.0.1';
@@ -75,11 +78,19 @@ class PaymentCallbackController
 
         // 1단계: KCP 브라우저 결과 코드 확인
         if ($resCd !== self::SUCCESS_RES_CD) {
-            Log::warning('KCP: payment result failed', [
+            $isCancelled = in_array($resCd, self::CANCEL_RES_CODES, true);
+
+            Log::info('KCP: payment result non-success', [
                 'ordr_idxx' => $ordrIdxx,
                 'res_cd' => $resCd,
                 'res_msg' => $resMsg,
+                'is_cancelled' => $isCancelled,
             ]);
+
+            // 사용자 취소는 오류 없이 체크아웃으로 복귀
+            if ($isCancelled) {
+                return redirect($this->resolveFailUrl());
+            }
 
             return redirect($this->resolveFailUrl([
                 'error' => $resCd,
@@ -101,9 +112,9 @@ class PaymentCallbackController
             // 가상계좌: 계좌 발급 완료 처리 (실제 입금은 vbankNotify에서 처리)
             // KCP 콜백의 use_pay_method=VCNT 또는 주문의 payment_method=vbank 로 감지
             $isVbank = ($validated['use_pay_method'] ?? '') === 'VCNT'
-                || ($order->payment?->payment_method?->value === 'vbank');
+                || in_array($order->payment?->payment_method?->value, ['vbank', 'virtual_account'], true);
             if ($isVbank) {
-                return $this->handleVbankIssued($validated, $order, $encData, $encInfo, $ordrIdxx, $custIp);
+                return $this->handleVbankIssued($validated, $order, $encData, $encInfo, $ordrIdxx, $custIp, $request);
             }
 
             HookManager::doAction('sirsoft-pay_nhnkcp.payment.before_confirm', $order, $validated);
@@ -138,6 +149,8 @@ class PaymentCallbackController
                 ? $goodMny
                 : (int) round((float) $order->total_amount, 2);
 
+            $isEscrow = ($pgResponse['escw_yn'] ?? '') === 'Y';
+
             // 4단계: 주문 완료 처리
             $this->orderService->completePayment($order, [
                 'transaction_id' => $tno,
@@ -155,10 +168,20 @@ class PaymentCallbackController
                     'account' => $pgResponse['account'] ?? null,
                     'bank_name' => $pgResponse['bank_name'] ?? null,
                     'vnbank_expire_date' => $pgResponse['vnbank_expire_date'] ?? null,
+                    'escw_yn' => $pgResponse['escw_yn'] ?? null,
                     'pg_raw_response' => $pgResponse,
                 ],
                 'payment_device' => $this->detectDevice($request),
             ], $approvedAmt);
+
+            // 에스크로 결제인 경우 is_escrow 플래그 저장
+            if ($isEscrow) {
+                $order->payment()->update(['is_escrow' => true]);
+            }
+
+            // KCP가 실제로 결제를 처리했으므로 pg_provider를 nhnkcp로 보정
+            // (기본 PG가 타 PG일 때 주문이 해당 PG provider로 생성되는 경우 대비)
+            $order->payment()->update(['pg_provider' => 'nhnkcp']);
 
             return redirect($this->resolveSuccessUrl($ordrIdxx));
 
@@ -237,6 +260,8 @@ class PaymentCallbackController
                 ],
             ], $goodMny);
 
+            $order->payment()->update(['pg_provider' => 'nhnkcp']);
+
             Log::info('KCP: vbank deposit confirmed', ['tno' => $tno, 'ordr_idxx' => $ordrIdxx, 'good_mny' => $goodMny]);
 
             return response('OK', 200)->header('Content-Type', 'text/plain');
@@ -256,7 +281,12 @@ class PaymentCallbackController
      * 가상계좌 발급 처리
      *
      * authCallback에서 use_pay_method=VCNT일 때 호출됩니다.
-     * CLI로 계좌 정보를 확인한 뒤 order_meta에 저장하고 성공 페이지로 이동합니다.
+     *
+     * PC Standard Pay: enc_data/enc_info가 동봉되므로 CLI로 복호화하여 계좌 정보를 얻습니다.
+     * Mobile SmartPhone Pay: enc_data 없이 평문 필드(bankname/account/depositor/va_date)가
+     *   콜백 POST에 직접 포함되므로 CLI 호출을 건너뛰고 요청에서 직접 읽습니다.
+     *
+     * 어느 경로든 계좌 발급은 성공한 상태이므로 success URL로 리다이렉트합니다.
      * 실제 결제 완료(completePayment)는 입금 통보(vbankNotify) 시점에 처리됩니다.
      */
     private function handleVbankIssued(
@@ -266,37 +296,58 @@ class PaymentCallbackController
         string $encInfo,
         string $ordrIdxx,
         string $custIp,
+        Request $request,
     ): \Illuminate\Http\RedirectResponse {
-        // KCP 브라우저 콜백 res_cd=0000은 계좌 발급 성공을 의미.
-        // CLI 호출로 복호화된 계좌 정보를 가져오되, CLI 실패는 계좌 상세정보 조회 실패일 뿐
-        // 계좌 발급 자체는 성공이므로 success URL로 리다이렉트한다.
         $tno = $validated['tno'] ?? '';
         $pgResponse = [];
+        $isMobile = $encData === '' || $encInfo === '';
 
-        try {
-            $pgResponse = $this->apiService->approvePayment($encData, $encInfo, $ordrIdxx, $custIp);
-            $pgResCd = $pgResponse['res_cd'] ?? '';
+        if ($isMobile) {
+            // 모바일: 콜백 POST 의 평문 필드를 그대로 응답으로 취급
+            // KCP 변종 키 모두 대응 (bankname|bank_name, depositor|account_holder, va_date|vnbank_expire_date)
+            $pgResponse = [
+                'res_cd'    => $validated['res_cd'] ?? self::SUCCESS_RES_CD,
+                'tno'       => $tno,
+                'bankname'  => $request->input('bankname') ?? $request->input('bank_name'),
+                'account'   => $request->input('account'),
+                'depositor' => $request->input('depositor') ?? $request->input('account_holder'),
+                'va_date'   => $request->input('va_date') ?? $request->input('vnbank_expire_date'),
+            ];
 
-            if ($pgResCd === self::SUCCESS_RES_CD) {
-                $tno = $pgResponse['tno'] ?? $tno;
-                Log::info('KCP: vbank account issued via CLI', [
+            Log::info('KCP: vbank account issued via mobile callback (no CLI)', [
+                'ordr_idxx' => $ordrIdxx,
+                'tno'       => $tno,
+                'bankname'  => $pgResponse['bankname'],
+                'account'   => $pgResponse['account'],
+                'va_date'   => $pgResponse['va_date'],
+            ]);
+        } else {
+            // PC: CLI 호출로 복호화 — 실패해도 계좌 발급 자체는 성공이므로 진행
+            try {
+                $pgResponse = $this->apiService->approvePayment($encData, $encInfo, $ordrIdxx, $custIp);
+                $pgResCd = $pgResponse['res_cd'] ?? '';
+
+                if ($pgResCd === self::SUCCESS_RES_CD) {
+                    $tno = $pgResponse['tno'] ?? $tno;
+                    Log::info('KCP: vbank account issued via CLI', [
+                        'ordr_idxx' => $ordrIdxx,
+                        'tno' => $tno,
+                        'bankname' => $pgResponse['bankname'] ?? null,
+                        'account' => $pgResponse['account'] ?? null,
+                    ]);
+                } else {
+                    Log::warning('KCP: vbank CLI returned non-0000 — account still issued, proceeding to success', [
+                        'ordr_idxx' => $ordrIdxx,
+                        'res_cd' => $pgResCd,
+                        'res_msg' => $pgResponse['res_msg'] ?? '',
+                    ]);
+                }
+            } catch (\Exception $e) {
+                Log::warning('KCP: vbank CLI exception — account still issued, proceeding to success', [
                     'ordr_idxx' => $ordrIdxx,
-                    'tno' => $tno,
-                    'bank_name' => $pgResponse['bank_name'] ?? null,
-                    'account' => $pgResponse['account'] ?? null,
-                ]);
-            } else {
-                Log::warning('KCP: vbank CLI returned non-0000 — account still issued, proceeding to success', [
-                    'ordr_idxx' => $ordrIdxx,
-                    'res_cd' => $pgResCd,
-                    'res_msg' => $pgResponse['res_msg'] ?? '',
+                    'error' => $e->getMessage(),
                 ]);
             }
-        } catch (\Exception $e) {
-            Log::warning('KCP: vbank CLI exception — account still issued, proceeding to success', [
-                'ordr_idxx' => $ordrIdxx,
-                'error' => $e->getMessage(),
-            ]);
         }
 
         // 가상계좌 발급 정보를 OrderPayment vbank 전용 컬럼에 저장 (PENDING_PAYMENT 상태 유지)
@@ -304,7 +355,7 @@ class PaymentCallbackController
             $expireRaw = $pgResponse['va_date'] ?? null;
             $vbankDueAt = null;
             if ($expireRaw) {
-                // KCP va_date: YYYYMMDDHHMMSS (14자리)
+                // KCP va_date: YYYYMMDDHHMMSS (14자리) 또는 YYYYMMDD (8자리)
                 try {
                     $vbankDueAt = strlen($expireRaw) <= 8
                         ? Carbon::createFromFormat('Ymd', $expireRaw)->endOfDay()
@@ -321,6 +372,7 @@ class PaymentCallbackController
                 'vbank_holder'    => $pgResponse['depositor'] ?? null,
                 'vbank_due_at'    => $vbankDueAt,
                 'vbank_issued_at' => now(),
+                'payment_device'  => $isMobile ? 'mobile' : 'pc',
                 'payment_meta'    => $pgResponse ?: null,
             ], fn ($v) => $v !== null));
         } catch (\Exception $e) {
@@ -338,22 +390,64 @@ class PaymentCallbackController
         $settings = $this->pluginSettingsService->get(self::PLUGIN_IDENTIFIER) ?? [];
         $urlTemplate = $settings['redirect_success_url'] ?? '/shop/orders/{orderId}/complete';
 
-        return str_replace('{orderId}', $orderId, $urlTemplate);
+        return $this->absolutize(str_replace('{orderId}', $orderId, $urlTemplate));
     }
 
     private function resolveFailUrl(array $queryParams = []): string
     {
         $settings = $this->pluginSettingsService->get(self::PLUGIN_IDENTIFIER) ?? [];
-        $baseUrl = $settings['redirect_fail_url'] ?? '/shop/checkout';
+        $baseUrl = $this->absolutize($settings['redirect_fail_url'] ?? '/shop/checkout');
 
         if (empty($queryParams)) {
             return $baseUrl;
+        }
+
+        // error 코드와 message 가 모두 있으면 message 앞에 '[코드] ' 자동 prefix.
+        // 체크아웃 페이지에서 사용자가 오류 종류를 즉시 식별할 수 있도록 한다.
+        // 예: error=9502, message=연동 모듈 호출 오류 → message=[9502] 연동 모듈 호출 오류
+        if (! empty($queryParams['error']) && ! empty($queryParams['message'])) {
+            $queryParams['message'] = sprintf('[%s] %s', $queryParams['error'], $queryParams['message']);
         }
 
         $query = http_build_query(array_filter($queryParams));
         $separator = str_contains($baseUrl, '?') ? '&' : '?';
 
         return $baseUrl . $separator . $query;
+    }
+
+    /**
+     * 상대 경로면 APP_URL 기준으로 절대 URL 화.
+     *
+     * PG가 브라우저 POST 로 콜백을 보내는 동안 Apache 가 ProxyPreserveHost Off 등
+     * 으로 Host 헤더를 localhost 로 바꿔서 PHP 에 전달하는 경우, Laravel 의
+     * redirect('/path') 가 http://localhost/path 를 생성해버린다. config('app.url')
+     * (.env 의 APP_URL)을 명시적 base 로 사용하여 도메인을 보존한다.
+     */
+    private function absolutize(string $url): string
+    {
+        if (preg_match('#^https?://#i', $url) === 1) {
+            return $url;
+        }
+
+        $base = rtrim((string) config('app.url'), '/');
+        $path = $url === '' ? '/' : ($url[0] === '/' ? $url : '/' . $url);
+
+        return $base . $path;
+    }
+
+    /**
+     * KCP 모바일 게이트웨이는 EUC-KR(CP949) 인코딩으로 res_msg를 POST.
+     * 유효한 UTF-8이 아니면 CP949로 간주하고 변환한다.
+     */
+    private function decodeKcpMessage(string $msg): string
+    {
+        if ($msg === '' || mb_check_encoding($msg, 'UTF-8')) {
+            return $msg;
+        }
+
+        $converted = mb_convert_encoding($msg, 'UTF-8', 'CP949');
+
+        return $converted !== false ? $converted : $msg;
     }
 
     private function detectDevice(Request $request): string

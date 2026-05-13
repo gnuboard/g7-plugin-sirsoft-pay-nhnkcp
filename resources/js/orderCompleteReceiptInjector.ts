@@ -3,7 +3,6 @@ const FLAG = '__kcpOcReceiptInjectorInstalled';
 const BTN_ID = 'kcp-oc-receipt-btn';
 
 const ORDER_COMPLETE_RE = /^\/shop\/orders\/([^/]+)\/complete$/;
-const MYPAGE_ORDER_RE = /^\/mypage\/orders\/([^/]+)$/;
 
 type Payment = {
     pg_provider: string;
@@ -76,7 +75,11 @@ async function injectOnOrderComplete(orderNumber: string): Promise<void> {
         const data = await fetchReceiptUrl(orderNumber);
         btn.disabled = false;
         btn.textContent = '영수증 조회';
-        if (data?.receipt_url) window.open(data.receipt_url, '_blank', 'noopener,noreferrer');
+        if (data) {
+            const KcpPopup = (window as unknown as Record<string, unknown>).KcpReceiptPopup as
+                (new (p: { url?: string; cash_url?: string }) => unknown) | undefined;
+            if (KcpPopup) new KcpPopup({ url: data.receipt_url ?? undefined });
+        }
     });
     receiptBtn.id = BTN_ID;
 
@@ -93,7 +96,11 @@ async function injectOnOrderComplete(orderNumber: string): Promise<void> {
             const data = await fetchReceiptUrl(orderNumber);
             btn.disabled = false;
             btn.textContent = '현금영수증 조회';
-            if (data?.cash_receipt_url) window.open(data.cash_receipt_url, '_blank', 'noopener,noreferrer');
+            if (data) {
+                const KcpPopup = (window as unknown as Record<string, unknown>).KcpReceiptPopup as
+                    (new (p: { url?: string; cash_url?: string }) => unknown) | undefined;
+                if (KcpPopup) new KcpPopup({ cash_url: data.cash_receipt_url ?? undefined });
+            }
         });
         cashBtn.id = cashBtnId;
         container.insertBefore(cashBtn, lastBtn);
@@ -102,77 +109,13 @@ async function injectOnOrderComplete(orderNumber: string): Promise<void> {
     console.info(`[${PLUGIN_ID}] receipt button injected on order complete page`);
 }
 
-// 마이페이지 주문상세 페이지 영수증 영역 주입
-async function injectOnMypageOrder(orderNumber: string): Promise<void> {
-    const existingId = 'kcp-mp-receipt-row';
-    if (document.getElementById(existingId)) return;
-
-    const payment = await fetchPayment(orderNumber);
-    if (!payment || payment.pg_provider !== 'nhnkcp' || !payment.transaction_id) return;
-
-    // 결제수단, 카드명 등 label+value 행이 있는 dl/dd/p 영역 찾기
-    // "결제" 텍스트가 포함된 행들을 탐색해서 마지막 행 다음에 주입
-    const PAYMENT_LABEL_TEXTS = new Set(['결제수단', '결제방법', '결제 방법', '카드번호', '결제수단/카드정보']);
-    const paymentLabels = Array.from(document.querySelectorAll('span, dt, td, p'))
-        .filter(el => PAYMENT_LABEL_TEXTS.has(el.textContent?.trim() ?? ''));
-
-    let insertAfter: Element | null = null;
-    if (paymentLabels.length > 0) {
-        const last = paymentLabels[paymentLabels.length - 1];
-        // 행 컨테이너 (부모의 부모)
-        insertAfter = last.closest('[class*="flex"]') ?? last.parentElement;
-    }
-
-    const row = document.createElement('div');
-    row.id = existingId;
-    row.className = 'flex items-center justify-between pt-3 mt-2 border-t border-gray-200';
-    row.innerHTML = `<span class="text-sm text-gray-500">영수증</span><div class="flex gap-2"></div>`;
-
-    const btnArea = row.querySelector('div')!;
-
-    const receiptBtn = makeBtn('영수증 조회', 'inline-flex items-center gap-1 text-sm text-blue-600 hover:underline', async (btn) => {
-        btn.disabled = true;
-        btn.textContent = '로딩 중...';
-        const data = await fetchReceiptUrl(orderNumber);
-        btn.disabled = false;
-        btn.textContent = '영수증 조회';
-        if (data?.receipt_url) window.open(data.receipt_url, '_blank', 'noopener,noreferrer');
-    });
-    btnArea.appendChild(receiptBtn);
-
-    if (payment.payment_method === 'vbank' || payment.payment_method === 'bank_transfer') {
-        const cashBtn = makeBtn('현금영수증 조회', 'inline-flex items-center gap-1 text-sm text-green-600 hover:underline', async (btn) => {
-            btn.disabled = true;
-            btn.textContent = '로딩 중...';
-            const data = await fetchReceiptUrl(orderNumber);
-            btn.disabled = false;
-            btn.textContent = '현금영수증 조회';
-            if (data?.cash_receipt_url) window.open(data.cash_receipt_url, '_blank', 'noopener,noreferrer');
-        });
-        btnArea.appendChild(cashBtn);
-    }
-
-    if (insertAfter?.parentElement) {
-        insertAfter.parentElement.insertBefore(row, insertAfter.nextSibling);
-    } else {
-        // 삽입 위치를 못 찾으면 main_content_area 끝에 추가
-        document.getElementById('main_content')?.appendChild(row);
-    }
-
-    console.info(`[${PLUGIN_ID}] receipt row injected on mypage order page`);
-}
-
 function tryInject(): void {
     const path = location.pathname;
     const ocMatch = path.match(ORDER_COMPLETE_RE);
     if (ocMatch) {
         void injectOnOrderComplete(ocMatch[1]);
-        return;
     }
-    const mpMatch = path.match(MYPAGE_ORDER_RE);
-    if (mpMatch) {
-        void injectOnMypageOrder(mpMatch[1]);
-    }
+    // 마이페이지 주문상세는 mypageOrderShowInjector가 처리
 }
 
 export function installOrderCompleteReceiptInjector(): void {

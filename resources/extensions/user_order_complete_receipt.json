@@ -8,7 +8,110 @@
                 {
                     "type": "basic",
                     "name": "Div",
-                    "if": "{{orderData?.data?.payment?.pg_provider === 'nhnkcp' && orderData?.data?.payment?.transaction_id}}",
+                    "if": "{{orderData?.data?.payment?.pg_provider === 'nhnkcp' && orderData?.data?.payment?.vbank_name}}",
+                    "props": { "className": "pt-4 mt-2 border-t border-gray-200 dark:border-gray-700 space-y-3" },
+                    "children": [
+                        {
+                            "type": "basic",
+                            "name": "P",
+                            "props": { "className": "text-sm font-semibold text-gray-800 dark:text-gray-200" },
+                            "text": "$t:sirsoft-pay_nhnkcp.user.vbank_title"
+                        },
+                        {
+                            "type": "basic",
+                            "name": "Div",
+                            "props": { "className": "space-y-1.5" },
+                            "children": [
+                                {
+                                    "type": "basic",
+                                    "name": "Div",
+                                    "props": { "className": "flex items-center justify-between text-sm" },
+                                    "children": [
+                                        {
+                                            "type": "basic",
+                                            "name": "Span",
+                                            "props": { "className": "text-gray-500 dark:text-gray-400" },
+                                            "text": "$t:sirsoft-pay_nhnkcp.user.vbank_bank_name"
+                                        },
+                                        {
+                                            "type": "basic",
+                                            "name": "Span",
+                                            "props": { "className": "font-medium text-gray-900 dark:text-white" },
+                                            "text": "{{orderData?.data?.payment?.vbank_name}}"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Div",
+                                    "props": { "className": "flex items-center justify-between text-sm" },
+                                    "children": [
+                                        {
+                                            "type": "basic",
+                                            "name": "Span",
+                                            "props": { "className": "text-gray-500 dark:text-gray-400" },
+                                            "text": "$t:sirsoft-pay_nhnkcp.user.vbank_account"
+                                        },
+                                        {
+                                            "type": "basic",
+                                            "name": "Span",
+                                            "props": { "className": "font-medium text-gray-900 dark:text-white font-mono tracking-wide" },
+                                            "text": "{{orderData?.data?.payment?.vbank_number}}"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Div",
+                                    "props": { "className": "flex items-center justify-between text-sm" },
+                                    "children": [
+                                        {
+                                            "type": "basic",
+                                            "name": "Span",
+                                            "props": { "className": "text-gray-500 dark:text-gray-400" },
+                                            "text": "$t:sirsoft-pay_nhnkcp.user.vbank_holder"
+                                        },
+                                        {
+                                            "type": "basic",
+                                            "name": "Span",
+                                            "props": { "className": "font-medium text-gray-900 dark:text-white" },
+                                            "text": "{{orderData?.data?.payment?.vbank_holder}}"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Div",
+                                    "props": { "className": "flex items-center justify-between text-sm" },
+                                    "children": [
+                                        {
+                                            "type": "basic",
+                                            "name": "Span",
+                                            "props": { "className": "text-gray-500 dark:text-gray-400" },
+                                            "text": "$t:sirsoft-pay_nhnkcp.user.vbank_due"
+                                        },
+                                        {
+                                            "type": "basic",
+                                            "name": "Span",
+                                            "props": { "className": "font-medium text-gray-900 dark:text-white" },
+                                            "text": "{{orderData?.data?.payment?.due_date_formatted}}"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "type": "basic",
+                            "name": "P",
+                            "props": { "className": "text-xs text-amber-600 dark:text-amber-400" },
+                            "text": "$t:sirsoft-pay_nhnkcp.user.vbank_notice"
+                        }
+                    ]
+                },
+                {
+                    "type": "basic",
+                    "name": "Div",
+                    "if": "{{orderData?.data?.payment?.pg_provider === 'nhnkcp' && orderData?.data?.payment?.transaction_id && !orderData?.data?.payment?.vbank_name}}",
                     "props": { "className": "pt-4 mt-2 border-t border-gray-200 dark:border-gray-700" },
                     "children": [
                         {

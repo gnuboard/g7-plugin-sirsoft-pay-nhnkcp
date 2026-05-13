@@ -35,6 +35,8 @@ class NhnKcpApiService
 
     private string $siteCd;
 
+    private string $escrowSiteCd;
+
     private string $siteKey;
 
     private string $binDir;
@@ -46,6 +48,9 @@ class NhnKcpApiService
         $this->siteCd = $this->isTest
             ? ($settings['test_site_cd'] ?? 'T0000')
             : $this->buildLiveSiteCd($settings['live_site_cd'] ?? '');
+        $this->escrowSiteCd = $this->isTest
+            ? ($settings['escrow_test_site_cd'] ?? 'T0007')
+            : $this->siteCd;
         $this->siteKey = $this->isTest
             ? ($settings['test_site_key'] ?? '')
             : ($settings['live_site_key'] ?? '');
@@ -153,6 +158,51 @@ class NhnKcpApiService
         return $result;
     }
 
+    /**
+     * KCP 에스크로 배송 등록 (CLI 방식, mod_type=STE1)
+     *
+     * 에스크로 결제 후 상품을 발송할 때 KCP에 운송장번호를 등록합니다.
+     * 에스크로 테스트 결제는 T0007 site_cd를 사용하므로 escrowSiteCd로 호출합니다.
+     *
+     * @param  string  $tno       KCP 에스크로 거래번호
+     * @param  string  $ordrIdxx  주문번호
+     * @param  string  $deliNumb  운송장번호
+     * @param  string  $deliCorp  택배사코드 (KCP 코드: '04'=CJ대한통운, '05'=한진택배 등)
+     * @return array 파싱된 KCP 응답
+     */
+    public function registerEscrowDelivery(
+        string $tno,
+        string $ordrIdxx,
+        string $deliNumb,
+        string $deliCorp,
+    ): array {
+        $modxData = 'tno=' . $tno . chr(31)
+            . 'mod_type=STE1' . chr(31)
+            . 'deli_numb=' . $deliNumb . chr(31)
+            . 'deli_corp=' . $deliCorp . chr(31);
+
+        $result = $this->executeCli(
+            txCd: self::TX_CANCEL,
+            ordrIdxx: $ordrIdxx,
+            encData: '',
+            encInfo: '',
+            custIp: '127.0.0.1',
+            modxData: $modxData,
+            siteCdOverride: $this->escrowSiteCd,
+        );
+
+        if (($result['res_cd'] ?? '') !== '0000') {
+            Log::error('KCP CLI escrow delivery register failed', [
+                'res_cd' => $result['res_cd'] ?? '',
+                'res_msg' => $result['res_msg'] ?? '',
+                'tno' => $tno,
+            ]);
+            throw new NhnKcpApiException($result['res_msg'] ?? 'KCP escrow delivery registration failed');
+        }
+
+        return $result;
+    }
+
     private function executeCli(
         string $txCd,
         string $ordrIdxx,
@@ -160,13 +210,15 @@ class NhnKcpApiService
         string $encInfo,
         string $custIp,
         string $modxData = '',
+        string $siteCdOverride = '',
     ): array {
         $paUrl = $this->isTest ? self::PA_URL_TEST : self::PA_URL_LIVE;
+        $siteCd = $siteCdOverride !== '' ? $siteCdOverride : $this->siteCd;
 
         if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-            $resData = $this->executeCliWindows($txCd, $ordrIdxx, $encData, $encInfo, $custIp, $paUrl, $modxData);
+            $resData = $this->executeCliWindows($txCd, $ordrIdxx, $encData, $encInfo, $custIp, $paUrl, $modxData, $siteCd);
         } else {
-            $resData = $this->executeCliLinux($txCd, $ordrIdxx, $encData, $encInfo, $custIp, $paUrl, $modxData);
+            $resData = $this->executeCliLinux($txCd, $ordrIdxx, $encData, $encInfo, $custIp, $paUrl, $modxData, $siteCd);
         }
 
         Log::debug('KCP CLI response', [
@@ -200,12 +252,14 @@ class NhnKcpApiService
         string $custIp,
         string $paUrl,
         string $modxData,
+        string $siteCd = '',
     ): string {
+        $siteCd = $siteCd !== '' ? $siteCd : $this->siteCd;
         $keyPath = str_replace('/', DIRECTORY_SEPARATOR, $this->binDir . '/pub.key');
         $binPath = str_replace('/', DIRECTORY_SEPARATOR, $this->binDir . '/pp_cli_exe.exe');
         $planData = 'payx_data=' . ($modxData !== '' ? 'mod_data=' . $modxData : '');
 
-        $args = 'site_cd=' . $this->siteCd . ','
+        $args = 'site_cd=' . $siteCd . ','
             . 'site_key=' . $this->siteKey . ','
             . 'tx_cd=' . $txCd . ','
             . 'pa_url=' . $paUrl . ','
@@ -249,7 +303,9 @@ class NhnKcpApiService
         string $custIp,
         string $paUrl,
         string $modxData,
+        string $siteCd = '',
     ): string {
+        $siteCd = $siteCd !== '' ? $siteCd : $this->siteCd;
         $binExe = PHP_INT_MAX === 2147483647
             ? $this->binDir . '/pp_cli'
             : $this->binDir . '/pp_cli_x64';
@@ -257,7 +313,7 @@ class NhnKcpApiService
         $modxArg = $modxData !== '' ? 'mod_data=' . $modxData : '';
 
         $args = 'home=' . $this->binDir . ','
-            . 'site_cd=' . $this->siteCd . ','
+            . 'site_cd=' . $siteCd . ','
             . 'site_key=' . $this->siteKey . ','
             . 'tx_cd=' . $txCd . ','
             . 'pa_url=' . $paUrl . ','
