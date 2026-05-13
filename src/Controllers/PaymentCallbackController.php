@@ -280,14 +280,14 @@ class PaymentCallbackController
     /**
      * 가상계좌 발급 처리
      *
-     * authCallback에서 use_pay_method=VCNT일 때 호출됩니다.
+     * authCallback 에서 use_pay_method=VCNT 일 때 호출.
      *
-     * PC Standard Pay: enc_data/enc_info가 동봉되므로 CLI로 복호화하여 계좌 정보를 얻습니다.
+     * PC Standard Pay: enc_data/enc_info 가 동봉되어 CLI 로 복호화하여 계좌 정보를 얻음.
      * Mobile SmartPhone Pay: enc_data 없이 평문 필드(bankname/account/depositor/va_date)가
-     *   콜백 POST에 직접 포함되므로 CLI 호출을 건너뛰고 요청에서 직접 읽습니다.
+     *   콜백 POST 에 직접 포함되므로 CLI 호출을 건너뛰고 요청에서 직접 읽음.
      *
-     * 어느 경로든 계좌 발급은 성공한 상태이므로 success URL로 리다이렉트합니다.
-     * 실제 결제 완료(completePayment)는 입금 통보(vbankNotify) 시점에 처리됩니다.
+     * 발급 성공 = res_cd == 0000 AND bankname/account 가 모두 채워진 경우만.
+     * 그 외 (CLI 9502 / 예외 / 평문 필드 결락) 는 발급 실패로 판정해 failPayment + fail URL.
      */
     private function handleVbankIssued(
         array $validated,
@@ -307,50 +307,86 @@ class PaymentCallbackController
             // KCP 변종 키 모두 대응 (bankname|bank_name, depositor|account_holder, va_date|vnbank_expire_date)
             $pgResponse = [
                 'res_cd'    => $validated['res_cd'] ?? self::SUCCESS_RES_CD,
+                'res_msg'   => $validated['res_msg'] ?? '',
                 'tno'       => $tno,
                 'bankname'  => $request->input('bankname') ?? $request->input('bank_name'),
                 'account'   => $request->input('account'),
                 'depositor' => $request->input('depositor') ?? $request->input('account_holder'),
                 'va_date'   => $request->input('va_date') ?? $request->input('vnbank_expire_date'),
             ];
-
-            Log::info('KCP: vbank account issued via mobile callback (no CLI)', [
-                'ordr_idxx' => $ordrIdxx,
-                'tno'       => $tno,
-                'bankname'  => $pgResponse['bankname'],
-                'account'   => $pgResponse['account'],
-                'va_date'   => $pgResponse['va_date'],
-            ]);
         } else {
-            // PC: CLI 호출로 복호화 — 실패해도 계좌 발급 자체는 성공이므로 진행
+            // PC: CLI 호출. 호출 자체 실패(권한 누락 / pub.key 부재 등)는 발급 여부 미확정이므로 안전하게 실패 처리.
             try {
                 $pgResponse = $this->apiService->approvePayment($encData, $encInfo, $ordrIdxx, $custIp);
-                $pgResCd = $pgResponse['res_cd'] ?? '';
-
-                if ($pgResCd === self::SUCCESS_RES_CD) {
-                    $tno = $pgResponse['tno'] ?? $tno;
-                    Log::info('KCP: vbank account issued via CLI', [
-                        'ordr_idxx' => $ordrIdxx,
-                        'tno' => $tno,
-                        'bankname' => $pgResponse['bankname'] ?? null,
-                        'account' => $pgResponse['account'] ?? null,
-                    ]);
-                } else {
-                    Log::warning('KCP: vbank CLI returned non-0000 — account still issued, proceeding to success', [
-                        'ordr_idxx' => $ordrIdxx,
-                        'res_cd' => $pgResCd,
-                        'res_msg' => $pgResponse['res_msg'] ?? '',
-                    ]);
-                }
             } catch (\Exception $e) {
-                Log::warning('KCP: vbank CLI exception — account still issued, proceeding to success', [
+                Log::error('KCP: vbank CLI exception — treating as issuance failure', [
                     'ordr_idxx' => $ordrIdxx,
                     'error' => $e->getMessage(),
                 ]);
+
+                $this->orderService->failPayment($order, 'cli_exception', $e->getMessage());
+
+                return redirect($this->resolveFailUrl([
+                    'error' => 'cli_exception',
+                    'message' => $e->getMessage(),
+                    'orderId' => $ordrIdxx,
+                ]));
             }
         }
 
-        // 가상계좌 발급 정보를 OrderPayment vbank 전용 컬럼에 저장 (PENDING_PAYMENT 상태 유지)
+        $pgResCd = $pgResponse['res_cd'] ?? '';
+        $bankname = $pgResponse['bankname'] ?? null;
+        $account = $pgResponse['account'] ?? null;
+
+        // 발급 실패 판정 — res_cd 비-0000 또는 핵심 필드(은행/계좌) 결락 시 fail URL.
+        // 핵심 필드 결락도 실패로 보는 이유: 사용자가 complete 페이지에서 빈 계좌정보를 보고
+        // "결제 완료" 로 오인하는 회귀 차단 (운영 사례: res_cd=9502 + bankname/account NULL).
+        $hasIssuanceData = ($bankname !== null && $bankname !== '')
+            && ($account !== null && $account !== '');
+
+        if ($pgResCd !== self::SUCCESS_RES_CD || ! $hasIssuanceData) {
+            $resMsg = $this->decodeKcpMessage($pgResponse['res_msg'] ?? '');
+            $effectiveCode = $pgResCd !== self::SUCCESS_RES_CD ? $pgResCd : 'vbank_issuance_incomplete';
+            $effectiveMsg = $resMsg !== '' ? $resMsg : '가상계좌 발급 정보 누락';
+
+            Log::warning('KCP: vbank issuance failed', [
+                'ordr_idxx' => $ordrIdxx,
+                'res_cd' => $pgResCd,
+                'res_msg' => $resMsg,
+                'has_bankname' => $bankname !== null && $bankname !== '',
+                'has_account' => $account !== null && $account !== '',
+                'is_mobile' => $isMobile,
+            ]);
+
+            $this->orderService->failPayment($order, $effectiveCode, $effectiveMsg);
+
+            return redirect($this->resolveFailUrl([
+                'error' => $effectiveCode,
+                'message' => $effectiveMsg,
+                'orderId' => $ordrIdxx,
+            ]));
+        }
+
+        if ($isMobile) {
+            Log::info('KCP: vbank account issued via mobile callback (no CLI)', [
+                'ordr_idxx' => $ordrIdxx,
+                'tno'       => $tno,
+                'bankname'  => $bankname,
+                'account'   => $account,
+                'va_date'   => $pgResponse['va_date'] ?? null,
+            ]);
+        } else {
+            $tno = $pgResponse['tno'] ?? $tno;
+            Log::info('KCP: vbank account issued via CLI', [
+                'ordr_idxx' => $ordrIdxx,
+                'tno' => $tno,
+                'bankname' => $bankname,
+                'account' => $account,
+            ]);
+        }
+
+        // 가상계좌 발급 정보를 OrderPayment vbank 전용 컬럼에 저장 (PENDING_PAYMENT 상태 유지).
+        // 저장 실패 시도 부분 저장으로 사용자에게 잘못된 정보가 노출되지 않도록 failPayment 처리.
         try {
             $expireRaw = $pgResponse['va_date'] ?? null;
             $vbankDueAt = null;
@@ -367,19 +403,27 @@ class PaymentCallbackController
 
             $order->payment()->update(array_filter([
                 'transaction_id'  => $tno ?: null,
-                'vbank_name'      => $pgResponse['bankname'] ?? null,
-                'vbank_number'    => $pgResponse['account'] ?? null,
+                'vbank_name'      => $bankname,
+                'vbank_number'    => $account,
                 'vbank_holder'    => $pgResponse['depositor'] ?? null,
                 'vbank_due_at'    => $vbankDueAt,
                 'vbank_issued_at' => now(),
                 'payment_device'  => $isMobile ? 'mobile' : 'pc',
-                'payment_meta'    => $pgResponse ?: null,
+                'payment_meta'    => $pgResponse,
             ], fn ($v) => $v !== null));
         } catch (\Exception $e) {
             Log::error('KCP: failed to save vbank info to OrderPayment', [
                 'ordr_idxx' => $ordrIdxx,
                 'error' => $e->getMessage(),
             ]);
+
+            $this->orderService->failPayment($order, 'vbank_save_failed', $e->getMessage());
+
+            return redirect($this->resolveFailUrl([
+                'error' => 'vbank_save_failed',
+                'message' => $e->getMessage(),
+                'orderId' => $ordrIdxx,
+            ]));
         }
 
         return redirect($this->resolveSuccessUrl($ordrIdxx));
