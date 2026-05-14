@@ -338,15 +338,20 @@ class PaymentCallbackController
         $bankname = $pgResponse['bankname'] ?? null;
         $account = $pgResponse['account'] ?? null;
 
-        // 발급 실패 판정 — res_cd 비-0000 또는 핵심 필드(은행/계좌) 결락 시 fail URL.
-        // 핵심 필드 결락도 실패로 보는 이유: 사용자가 complete 페이지에서 빈 계좌정보를 보고
-        // "결제 완료" 로 오인하는 회귀 차단 (운영 사례: res_cd=9502 + bankname/account NULL).
+        // 발급 성공 판정 — 핵심 필드(은행명/계좌번호) 모두 채워진 경우만 성공.
+        // KCP 표준결제창은 결제수단별로 정상 res_cd 가 다르다 (card=0000, vbank=V000).
+        // res_cd 단일 비교 대신 발급 데이터 존재 여부로 판정해 응답 변종에 견고하게 대응.
+        // - V000 + bankname/account 존재 → 정상 발급 (success)
+        // - 0000 + bankname/account 존재 → 정상 발급 (success)
+        // - 9502 + bankname/account 부재 → 발급 실패 (fail)
         $hasIssuanceData = ($bankname !== null && $bankname !== '')
             && ($account !== null && $account !== '');
 
-        if ($pgResCd !== self::SUCCESS_RES_CD || ! $hasIssuanceData) {
+        if (! $hasIssuanceData) {
             $resMsg = $this->decodeKcpMessage($pgResponse['res_msg'] ?? '');
-            $effectiveCode = $pgResCd !== self::SUCCESS_RES_CD ? $pgResCd : 'vbank_issuance_incomplete';
+            $effectiveCode = $pgResCd !== '' && $pgResCd !== self::SUCCESS_RES_CD
+                ? $pgResCd
+                : 'vbank_issuance_incomplete';
             $effectiveMsg = $resMsg !== '' ? $resMsg : '가상계좌 발급 정보 누락';
 
             Log::warning('KCP: vbank issuance failed', [

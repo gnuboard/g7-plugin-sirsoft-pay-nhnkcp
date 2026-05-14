@@ -402,10 +402,61 @@ class PaymentCallbackControllerTest extends PluginTestCase
         $this->assertEquals('FAIL', $response->getContent());
     }
 
+    // ===== 가상계좌 발급 (handleVbankIssued) 성공 처리 =====
+
+    /**
+     * PC 가상계좌: KCP 가 res_cd=V000 ("가상계좌가 발급되었습니다.") + bankname/account 응답 시
+     * success URL 로 리다이렉트 + vbank 컬럼 정상 저장.
+     *
+     * 회귀: KCP 표준결제창은 결제수단별로 다른 정상 응답 코드를 사용한다
+     *      (card=0000, vbank=V000). SUCCESS_RES_CD='0000' 단일 비교만으로 검증하면
+     *      정상 가상계좌 발급도 fail URL 로 처리됨 — 실제 운영 회귀 발견 (주문 20260513-0846191476).
+     *      판정 기준을 res_cd 비교에서 핵심 필드(bankname/account) 존재 여부로 변경.
+     */
+    public function test_vbank_pc_succeeds_on_kcp_v000_with_issuance_data(): void
+    {
+        $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
+        $this->mockPluginSettings();
+
+        $tno = 'KCP_VBANK_V000';
+        $this->mockApiService([
+            'res_cd'    => 'V000',
+            'res_msg'   => '가상계좌가 발급되었습니다.',
+            'tno'       => $tno,
+            'bankname'  => 'NH농협',
+            'account'   => 'T1109260001455',
+            'depositor' => 'NHN KCP',
+            'va_date'   => '20260516235959',
+            'bankcode'  => 'BK11',
+            'app_time'  => '20260513174624',
+        ]);
+
+        $response = $this->post(
+            '/plugins/sirsoft-pay_nhnkcp/payment/callback',
+            $this->makeCallbackParams($order->order_number, 30000, [
+                'tno'            => $tno,
+                'use_pay_method' => 'VCNT',
+            ])
+        );
+
+        $response->assertRedirect("/shop/orders/{$order->order_number}/complete");
+
+        $order->refresh();
+        $this->assertNotEquals(OrderStatusEnum::CANCELLED, $order->order_status);
+
+        $payment = $order->payment;
+        $payment->refresh();
+        $this->assertEquals('NH농협', $payment->vbank_name);
+        $this->assertEquals('T1109260001455', $payment->vbank_number);
+        $this->assertEquals('NHN KCP', $payment->vbank_holder);
+        $this->assertNotNull($payment->vbank_due_at);
+        $this->assertNotNull($payment->vbank_issued_at);
+    }
+
     // ===== 가상계좌 발급 (handleVbankIssued) 실패 처리 =====
 
     /**
-     * PC 가상계좌: CLI 가 res_cd != 0000 (예: 9502 연동 모듈 호출 오류) 응답 시
+     * PC 가상계좌: CLI 가 res_cd != 정상 + bankname/account 결락 응답 시 (예: 9502 연동 모듈 호출 오류)
      * fail URL 로 리다이렉트 + payment_status 가 결제 완료로 전환되지 않아야 함.
      *
      * 회귀: 기존 코드는 "계좌 발급 자체는 성공" 가정하에 success URL 로 보내
