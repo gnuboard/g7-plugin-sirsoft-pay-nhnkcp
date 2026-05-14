@@ -350,56 +350,164 @@ class PaymentCallbackControllerTest extends PluginTestCase
         $this->assertEquals('mobile', $payment->payment_device);
     }
 
-    // ===== 가상계좌 입금 통보 =====
+    // ===== 가상계좌 입금 통보 (KCP 공식 webhook 페이로드) =====
+    //
+    // 페이로드 키 (그누보드5 settle_kcp_common.php 참고):
+    //   tx_cd=TX00 + op_cd=50 (입금완료) / 01 (재전송) / 13 (망취소)
+    //   tno, order_no, ipgm_mnyx, ipgm_name, remitter, bank_code, account, noti_id
+    //
+    // 응답: <form><input name="result" value="0000"> HTML
+    //   - result=0000 → KCP 가 통보 성공으로 인정 (재시도 차단)
+    //   - 그 외 → KCP 재통보 (최대 10회)
 
-    public function test_vbank_notify_returns_ok_on_successful_deposit(): void
+    private function assertKcpNotifyOk(\Illuminate\Testing\TestResponse $response): void
     {
-        $order = $this->createTestOrder(30000);
-
-        $response = $this->post('/plugins/sirsoft-pay_nhnkcp/payment/vbank-notify', [
-            'tno'                => 'KCP_VBANK_TNO_001',
-            'ordr_idxx'          => $order->order_number,
-            'good_mny'           => 30000,
-            'res_cd'             => '0000',
-            'res_msg'            => '입금완료',
-            'bank_name'          => '국민은행',
-            'account'            => '1234567890',
-            'account_holder'     => '홍길동',
-            'vnbank_expire_date' => now()->addDays(3)->format('Ymd'),
-        ]);
-
         $response->assertOk();
-        $this->assertEquals('OK', $response->getContent());
+        $this->assertStringContainsString('name="result"', $response->getContent());
+        $this->assertStringContainsString('value="0000"', $response->getContent());
+    }
+
+    private function assertKcpNotifyRetry(\Illuminate\Testing\TestResponse $response): void
+    {
+        $response->assertOk();
+        $this->assertStringContainsString('name="result"', $response->getContent());
+        $this->assertStringNotContainsString('value="0000"', $response->getContent());
+    }
+
+    private function makeVbankNotifyPayload(string $orderNo, int $amount, array $overrides = []): array
+    {
+        return array_merge([
+            'site_cd'    => 'T0000',
+            'tno'        => 'KCP_VBANK_TNO_' . uniqid(),
+            'order_no'   => $orderNo,
+            'tx_cd'      => 'TX00',
+            'tx_tm'      => now()->format('YmdHis'),
+            'op_cd'      => '50',
+            'ipgm_mnyx'  => $amount,
+            'ipgm_name'  => '홍길동',
+            'remitter'   => '홍길동',
+            'bank_code'  => 'BK04',
+            'account'    => 'T1234567890',
+            'noti_id'    => uniqid('NOTI_'),
+        ], $overrides);
+    }
+
+    /**
+     * KCP 공식 발신 IP 로 vbank-notify POST.
+     * RestrictKcpIp 미들웨어가 항상 IP 검증하므로 화이트리스트 IP 필수.
+     */
+    private function postVbankNotify(array $payload, string $kcpIp = '203.238.36.58'): \Illuminate\Testing\TestResponse
+    {
+        return $this->withServerVariables(['REMOTE_ADDR' => $kcpIp])
+            ->post('/plugins/sirsoft-pay_nhnkcp/payment/vbank-notify', $payload);
+    }
+
+    public function test_vbank_notify_completes_payment_on_op_cd_50(): void
+    {
+        $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
+
+        $response = $this->postVbankNotify(
+            $this->makeVbankNotifyPayload($order->order_number, 30000, ['op_cd' => '50'])
+        );
+
+        $this->assertKcpNotifyOk($response);
 
         $order->refresh();
         $this->assertEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
     }
 
-    public function test_vbank_notify_returns_ok_on_non_0000_res_cd(): void
+    /**
+     * 멱등성 — op_cd=01 (재전송) 시 이미 결제완료 상태이면 0000 응답으로 차단.
+     */
+    public function test_vbank_notify_idempotent_on_op_cd_01_resend(): void
     {
-        $response = $this->post('/plugins/sirsoft-pay_nhnkcp/payment/vbank-notify', [
-            'tno'       => 'KCP_VBANK_TNO_002',
-            'ordr_idxx' => 'ORD-TEST-CANCEL',
-            'good_mny'  => 30000,
-            'res_cd'    => '8001',
-            'res_msg'   => '입금취소',
-        ]);
+        $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
 
-        $response->assertOk();
-        $this->assertEquals('OK', $response->getContent());
+        // 첫 통보 — 입금완료
+        $this->postVbankNotify(
+            $this->makeVbankNotifyPayload($order->order_number, 30000, ['op_cd' => '50'])
+        );
+
+        // 두 번째 — 재전송 (op_cd=01), 동일 noti_id 가정
+        $response = $this->postVbankNotify(
+            $this->makeVbankNotifyPayload($order->order_number, 30000, ['op_cd' => '01'])
+        );
+
+        $this->assertKcpNotifyOk($response);
     }
 
-    public function test_vbank_notify_returns_fail_on_order_not_found(): void
+    /**
+     * 망취소 — op_cd=13 시 로깅만 하고 0000 응답 (정책 미정, 자동 취소 안 함).
+     */
+    public function test_vbank_notify_logs_op_cd_13_cancel(): void
     {
-        $response = $this->post('/plugins/sirsoft-pay_nhnkcp/payment/vbank-notify', [
-            'tno'       => 'KCP_VBANK_TNO_003',
-            'ordr_idxx' => 'NON_EXISTENT_ORDER',
-            'good_mny'  => 30000,
-            'res_cd'    => '0000',
+        $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
+
+        $response = $this->postVbankNotify(
+            $this->makeVbankNotifyPayload($order->order_number, 30000, ['op_cd' => '13'])
+        );
+
+        $this->assertKcpNotifyOk($response);
+
+        $order->refresh();
+        // 망취소는 결제완료로 전환하지 않음
+        $this->assertNotEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
+    }
+
+    /**
+     * tx_cd 가 TX00 외 (예: TX01 환불, TX02 구매확인) 일 때 무시 + 0000 응답.
+     * KCP 가 단일 webhook URL 로 모든 tx_cd 를 보낼 가능성에 대비.
+     */
+    public function test_vbank_notify_ignores_non_tx00(): void
+    {
+        $response = $this->postVbankNotify(
+            $this->makeVbankNotifyPayload('ANY-ORDER', 30000, ['tx_cd' => 'TX01'])
+        );
+
+        $this->assertKcpNotifyOk($response);
+    }
+
+    /**
+     * 주문 없음 — 영구 실패라 재시도 의미 없음, 0000 응답으로 KCP 재통보 차단.
+     */
+    public function test_vbank_notify_returns_ok_on_order_not_found(): void
+    {
+        $response = $this->postVbankNotify(
+            $this->makeVbankNotifyPayload('NON_EXISTENT_ORDER', 30000)
+        );
+
+        $this->assertKcpNotifyOk($response);
+    }
+
+    /**
+     * 회귀: 그누보드5 settle_kcp_common.php 와 동일한 KCP 공식 페이로드(order_no/ipgm_mnyx/op_cd)
+     * 를 사용해야 함. 옛 키(ordr_idxx/good_mny/res_cd) 사용 시 FormRequest 단계 422 차단.
+     *
+     * 본 테스트는 실제 KCP 가 보낼 페이로드가 정상 처리됨을 보장.
+     */
+    public function test_vbank_notify_accepts_kcp_official_payload(): void
+    {
+        $order = $this->createTestOrder(50000, [], PaymentMethodEnum::VBANK);
+
+        $response = $this->postVbankNotify([
+            'site_cd'   => 'T0000',
+            'tno'       => 'KCP_TNO_REAL',
+            'order_no'  => $order->order_number,
+            'tx_cd'     => 'TX00',
+            'tx_tm'     => '20260514120000',
+            'op_cd'     => '50',
+            'ipgm_mnyx' => 50000,
+            'ipgm_name' => '홍길동',
+            'remitter'  => '실입금자',
+            'bank_code' => '04',
+            'account'   => 'T9876543210',
+            'noti_id'   => '26051412000018046532',
         ]);
 
-        $response->assertOk();
-        $this->assertEquals('FAIL', $response->getContent());
+        $this->assertKcpNotifyOk($response);
+
+        $order->refresh();
+        $this->assertEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
     }
 
     // ===== 가상계좌 발급 (handleVbankIssued) 성공 처리 =====

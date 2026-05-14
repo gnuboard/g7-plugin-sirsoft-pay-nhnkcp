@@ -25,18 +25,26 @@ class EscrowCommonNotifyRequest extends FormRequest
     }
 
     /**
-     * KCP 에스크로 통보 페이로드 검증 규칙
+     * KCP 에스크로 통보 페이로드 검증 규칙 (KCP 공식 webhook 명세)
+     *
+     * KCP 결제창 콜백과 달리 통보 webhook 은 order_no 키를 사용한다
+     * (그누보드5 settle_kcp_common.php 와 동일). ordr_idxx 사용 시 422 차단.
      *
      * @return array<string, mixed> Laravel 검증 규칙
      */
     public function rules(): array
     {
         return [
-            'tx_cd'     => ['required', 'string'],
+            'site_cd'   => ['nullable', 'string'],
             'tno'       => ['nullable', 'string'],
-            'ordr_idxx' => ['required', 'string'],
+            'order_no'  => ['required', 'string'],
+            'tx_cd'     => ['required', 'string'],
+            'tx_tm'     => ['nullable', 'string'],
             'cl_status' => ['nullable', 'string'],
-            'good_mny'  => ['nullable', 'numeric'],
+            'st_cd'     => ['nullable', 'string'],
+            'can_msg'   => ['nullable', 'string'],
+            'waybill_no'   => ['nullable', 'string'],
+            'waybill_corp' => ['nullable', 'string'],
         ];
     }
 }
