@@ -18,7 +18,7 @@ class UserVbankMockDepositController
 {
     private const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
 
-    private const KCP_TEST_MOCK_URL = 'http://devadmin.kcp.co.kr/Modules/Noti/TEST_Vcnt_Noti_Proc.jsp';
+    private const KCP_TEST_MOCK_URL = 'https://testadmin.kcp.co.kr/Modules/Noti/TEST_Vcnt_Noti.jsp';
 
     private const VBANK_NOTIFY_PATH = '/plugins/sirsoft-pay_nhnkcp/payment/vbank-notify';
 

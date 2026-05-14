@@ -13,6 +13,7 @@ use Modules\Sirsoft\Ecommerce\Exceptions\PaymentAmountMismatchException;
 use Carbon\Carbon;
 use Modules\Sirsoft\Ecommerce\Models\Order;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
+use Plugins\Sirsoft\PayNhnkcp\Concerns\SendsKcpNotifyResponse;
 use Plugins\Sirsoft\PayNhnkcp\Http\Requests\AuthCallbackRequest;
 use Plugins\Sirsoft\PayNhnkcp\Http\Requests\VbankNotifyRequest;
 use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
@@ -26,12 +27,24 @@ use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
  */
 class PaymentCallbackController
 {
+    use SendsKcpNotifyResponse;
+
     private const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
 
     private const SUCCESS_RES_CD = '0000';
 
     // 사용자가 결제창을 직접 닫은 취소 코드 — 조용히 체크아웃으로 복귀
     private const CANCEL_RES_CODES = ['3001', '3000', '7777', ''];
+
+    // KCP 공통통보 tx_cd — 그누보드5 settle_kcp_common.php 참고
+    private const KCP_TX_CD_VBANK_DEPOSIT = 'TX00';
+
+    // KCP 가상계좌 입금통보 op_cd
+    private const KCP_OP_CD_DEPOSIT_COMPLETE = '50';
+
+    private const KCP_OP_CD_DEPOSIT_RESEND = '01';
+
+    private const KCP_OP_CD_DEPOSIT_CANCEL = '13';
 
     public function __construct(
         private readonly OrderProcessingService $orderService,
@@ -213,67 +226,109 @@ class PaymentCallbackController
      *
      * POST /plugins/sirsoft-pay_nhnkcp/payment/vbank-notify
      * (KCP 서버 → 우리 서버, CSRF 제외)
-     */
-    /**
-     * 가상계좌 입금 통보 처리
      *
-     * KCP 서버가 직접 호출하는 입금 확인 웹훅. res_cd '0000' 입금완료 통보만
-     * 결제완료 처리하고 그 외 코드는 payment_meta 에 timeline 으로 누적.
-     * 어떤 결과든 200 + 정확히 "OK" 응답으로 KCP 재시도 차단.
+     * KCP 공식 webhook 페이로드 (그누보드5 settle_kcp_common.php 참고):
+     *   tx_cd=TX00 (가상계좌 입금) + op_cd 50/01/13 + ipgm_mnyx + order_no + noti_id
+     *
+     * 응답: <form><input name="result" value="0000"> HTML 을 KCP 가 파싱.
+     * result="0000" 이면 통보 성공, 그 외이면 재통보 (최대 10회).
      *
      * @param  VbankNotifyRequest  $request  검증된 입금통보 페이로드
-     * @return Response 항상 200 + "OK" (text/plain)
+     * @return Response 200 + KCP 표준 result HTML
      */
     public function vbankNotify(VbankNotifyRequest $request): Response
     {
         $validated = $request->validated();
 
+        $txCd = (string) ($validated['tx_cd'] ?? self::KCP_TX_CD_VBANK_DEPOSIT);
         $tno = $validated['tno'];
-        $ordrIdxx = $validated['ordr_idxx'];
-        $goodMny = (int) $validated['good_mny'];
-        $resCd = $validated['res_cd'];
+        $orderNo = $validated['order_no'];
+        $opCd = (string) ($validated['op_cd'] ?? '');
+        $ipgmMny = (int) ($validated['ipgm_mnyx'] ?? 0);
+        $notiId = $validated['noti_id'] ?? null;
 
-        if ($resCd !== self::SUCCESS_RES_CD) {
-            Log::warning('KCP: vbank deposit not confirmed', ['tno' => $tno, 'ordr_idxx' => $ordrIdxx, 'res_cd' => $resCd]);
+        // tx_cd 가 TX00 가 아니면 본 endpoint 가 처리하지 않음.
+        // (KCP 가 단일 webhook URL 에 모든 tx_cd 를 보낼 수도 있어 안전하게 무시 + result=0000)
+        if ($txCd !== self::KCP_TX_CD_VBANK_DEPOSIT) {
+            Log::info('KCP: vbank-notify ignored non-TX00', [
+                'tno' => $tno, 'order_no' => $orderNo, 'tx_cd' => $txCd, 'noti_id' => $notiId,
+            ]);
 
-            return response('OK', 200)->header('Content-Type', 'text/plain');
+            return $this->kcpNotifyResponse();
+        }
+
+        // op_cd: 50=입금완료, 01=재전송, 13=망취소.
+        // 망취소(13) 는 기관 망취소로 결제 취소 처리 필요하지만 현재 정책 미정 — 로깅만.
+        if ($opCd === self::KCP_OP_CD_DEPOSIT_CANCEL) {
+            Log::warning('KCP: vbank deposit cancelled (op_cd=13)', [
+                'tno' => $tno, 'order_no' => $orderNo, 'noti_id' => $notiId, 'ipgm_mnyx' => $ipgmMny,
+            ]);
+
+            return $this->kcpNotifyResponse();
+        }
+
+        // 50/01 외 코드는 알 수 없는 통보 — 로깅 후 result=0000 (재통보 차단)
+        if ($opCd !== self::KCP_OP_CD_DEPOSIT_COMPLETE && $opCd !== self::KCP_OP_CD_DEPOSIT_RESEND) {
+            Log::warning('KCP: vbank-notify unknown op_cd', [
+                'tno' => $tno, 'order_no' => $orderNo, 'op_cd' => $opCd, 'noti_id' => $notiId,
+            ]);
+
+            return $this->kcpNotifyResponse();
         }
 
         try {
-            $order = $this->orderService->findByOrderNumber($ordrIdxx);
+            $order = $this->orderService->findByOrderNumber($orderNo);
 
             if (! $order) {
-                Log::error('KCP: vbank notify - order not found', ['ordr_idxx' => $ordrIdxx, 'tno' => $tno]);
+                Log::error('KCP: vbank notify - order not found', [
+                    'order_no' => $orderNo, 'tno' => $tno, 'noti_id' => $notiId,
+                ]);
 
-                return response('FAIL', 200)->header('Content-Type', 'text/plain');
+                // 영구 실패 — 재시도 의미 없음. result=0000 으로 KCP 재통보 차단.
+                return $this->kcpNotifyResponse();
+            }
+
+            // 멱등성 — 이미 결제완료 상태면 재처리 없이 0000 응답 (op_cd=01 재전송 대응)
+            if ($order->payment?->isPaid() ?? false) {
+                Log::info('KCP: vbank-notify already paid (idempotent)', [
+                    'tno' => $tno, 'order_no' => $orderNo, 'noti_id' => $notiId, 'op_cd' => $opCd,
+                ]);
+
+                return $this->kcpNotifyResponse();
             }
 
             $this->orderService->completePayment($order, [
                 'transaction_id' => $tno,
                 'payment_meta' => [
-                    'res_cd' => $resCd,
-                    'bank_name' => $validated['bank_name'] ?? null,
+                    'tx_cd' => $txCd,
+                    'op_cd' => $opCd,
+                    'noti_id' => $notiId,
+                    'bank_code' => $validated['bank_code'] ?? null,
                     'account' => $validated['account'] ?? null,
-                    'account_holder' => $validated['account_holder'] ?? null,
-                    'vnbank_expire_date' => $validated['vnbank_expire_date'] ?? null,
+                    'ipgm_name' => $validated['ipgm_name'] ?? null,
+                    'remitter' => $validated['remitter'] ?? null,
+                    'ipgm_time' => $validated['tx_tm'] ?? null,
                     'pg_raw_response' => $validated,
                 ],
-            ], $goodMny);
+            ], $ipgmMny);
 
             $order->payment()->update(['pg_provider' => 'nhnkcp']);
 
-            Log::info('KCP: vbank deposit confirmed', ['tno' => $tno, 'ordr_idxx' => $ordrIdxx, 'good_mny' => $goodMny]);
+            Log::info('KCP: vbank deposit confirmed', [
+                'tno' => $tno, 'order_no' => $orderNo, 'ipgm_mnyx' => $ipgmMny,
+                'op_cd' => $opCd, 'noti_id' => $notiId,
+            ]);
 
-            return response('OK', 200)->header('Content-Type', 'text/plain');
+            return $this->kcpNotifyResponse();
 
         } catch (\Exception $e) {
             Log::error('KCP: vbank notify failed', [
-                'tno' => $tno,
-                'ordr_idxx' => $ordrIdxx,
+                'tno' => $tno, 'order_no' => $orderNo, 'noti_id' => $notiId,
                 'error' => $e->getMessage(),
             ]);
 
-            return response('FAIL', 200)->header('Content-Type', 'text/plain');
+            // 일시적 실패 (DB 등) — result != 0000 으로 KCP 재통보 유도
+            return $this->kcpNotifyRetry();
         }
     }
 
