@@ -165,7 +165,19 @@ async function handleMobilePayment(
     });
 
     if (!approvalJson.success || !approvalJson.data) {
-        throw new Error(approvalJson.error ?? 'KCP 모바일 승인키 획득 실패');
+        // 서버 응답의 에러 메시지 우선순위:
+        //   1. ResponseHelper::error 의 'error' 필드 (커스텀)
+        //   2. Laravel ValidationException 의 'message' 필드 (422 응답 표준)
+        //   3. 'errors' 객체의 첫 번째 메시지 (필드별 validation 메시지)
+        //   4. fallback
+        const errors = approvalJson.errors as Record<string, string[]> | undefined;
+        const firstFieldError = errors ? Object.values(errors)[0]?.[0] : undefined;
+        throw new Error(
+            approvalJson.error
+                ?? approvalJson.message
+                ?? firstFieldError
+                ?? 'KCP 모바일 승인키 획득 실패',
+        );
     }
 
     const { pay_url, fields } = approvalJson.data as { pay_url: string; fields: Record<string, string> };
