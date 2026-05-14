@@ -7,6 +7,7 @@ const ORDER_COMPLETE_RE = /^\/shop\/orders\/([^/]+)\/complete$/;
 type Payment = {
     pg_provider: string;
     transaction_id: string | null;
+    paid_at: string | null;
     [key: string]: unknown;
 };
 
@@ -59,7 +60,9 @@ async function injectOnOrderComplete(orderNumber: string): Promise<void> {
     if (document.getElementById(BTN_ID)) return;
 
     const payment = await fetchPayment(orderNumber);
-    if (!payment || payment.pg_provider !== 'nhnkcp' || !payment.transaction_id) return;
+    // 입금완료(paid_at 채워짐) 시점에만 영수증 버튼 표시.
+    // 가상계좌 발급 시 transaction_id 는 채워지지만 paid_at 은 null 이므로 입금대기 상태에선 미노출.
+    if (!payment || payment.pg_provider !== 'nhnkcp' || !payment.transaction_id || !payment.paid_at) return;
 
     // "주문 상세 보기" 버튼 찾기 (bg-blue-600)
     const blueBtn = Array.from(document.querySelectorAll<HTMLButtonElement>('button[type="button"]'))

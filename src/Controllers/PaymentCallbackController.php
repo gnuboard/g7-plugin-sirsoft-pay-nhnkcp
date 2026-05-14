@@ -11,6 +11,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Modules\Sirsoft\Ecommerce\Exceptions\PaymentAmountMismatchException;
 use Carbon\Carbon;
+use Modules\Sirsoft\Ecommerce\Helpers\DeviceDetector;
 use Modules\Sirsoft\Ecommerce\Models\Order;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\SendsKcpNotifyResponse;
@@ -184,7 +185,7 @@ class PaymentCallbackController
                     'escw_yn' => $pgResponse['escw_yn'] ?? null,
                     'pg_raw_response' => $pgResponse,
                 ],
-                'payment_device' => $this->detectDevice($request),
+                'payment_device' => DeviceDetector::detect($request),
             ], $approvedAmt);
 
             // 에스크로 결제인 경우 is_escrow 플래그 저장
@@ -257,20 +258,14 @@ class PaymentCallbackController
             return $this->kcpNotifyResponse();
         }
 
-        // op_cd: 50=입금완료, 01=재전송, 13=망취소.
-        // 망취소(13) 는 기관 망취소로 결제 취소 처리 필요하지만 현재 정책 미정 — 로깅만.
+        // op_cd 분기 (그누보드5 settle_kcp_common.php 와 동일 정책):
+        //   13 (망취소)         → 별도 처리 (입금완료 안 함, 결제 취소 정책 미정 — 로깅만)
+        //   그 외 (50/01/18/…)  → 입금완료 처리 (KCP testadmin 모의입금은 op_cd=18 사용 확인됨)
+        // KCP 공식 문서가 50/01/13 만 언급하지만 실제 KCP testadmin 발신은 18 등 추가 코드를
+        // 사용하므로 그누보드5 의 op_cd 무관 입금처리 정책을 따른다 (망취소만 분리).
         if ($opCd === self::KCP_OP_CD_DEPOSIT_CANCEL) {
             Log::warning('KCP: vbank deposit cancelled (op_cd=13)', [
                 'tno' => $tno, 'order_no' => $orderNo, 'noti_id' => $notiId, 'ipgm_mnyx' => $ipgmMny,
-            ]);
-
-            return $this->kcpNotifyResponse();
-        }
-
-        // 50/01 외 코드는 알 수 없는 통보 — 로깅 후 result=0000 (재통보 차단)
-        if ($opCd !== self::KCP_OP_CD_DEPOSIT_COMPLETE && $opCd !== self::KCP_OP_CD_DEPOSIT_RESEND) {
-            Log::warning('KCP: vbank-notify unknown op_cd', [
-                'tno' => $tno, 'order_no' => $orderNo, 'op_cd' => $opCd, 'noti_id' => $notiId,
             ]);
 
             return $this->kcpNotifyResponse();
@@ -554,17 +549,4 @@ class PaymentCallbackController
         return $converted !== false ? $converted : $msg;
     }
 
-    private function detectDevice(Request $request): string
-    {
-        $userAgent = $request->userAgent() ?? '';
-        $mobileKeywords = ['Mobile', 'Android', 'iPhone', 'iPad', 'iPod'];
-
-        foreach ($mobileKeywords as $keyword) {
-            if (stripos($userAgent, $keyword) !== false) {
-                return 'mobile';
-            }
-        }
-
-        return 'pc';
-    }
 }

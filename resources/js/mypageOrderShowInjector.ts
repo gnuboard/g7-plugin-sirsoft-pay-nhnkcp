@@ -10,6 +10,7 @@ interface Payment {
     pg_provider?: string;
     payment_method?: string;
     transaction_id?: string | null;
+    paid_at?: string | null;
     vbank_name?: string;
     vbank_number?: string;
     vbank_holder?: string;
@@ -283,7 +284,8 @@ async function tryInject(orderNumber: string): Promise<boolean> {
     if (!payment || payment.pg_provider !== 'nhnkcp') return true; // nhnkcp 아님
 
     const needsVbank = payment.payment_method === 'vbank' && !!payment.vbank_name;
-    const needsReceipt = !!payment.transaction_id;
+    // 영수증 버튼은 결제완료(paid_at 채워짐) 시점에만 표시 — 가상계좌 입금대기 상태 차단
+    const needsReceipt = !!payment.transaction_id && !!payment.paid_at;
     // 가상계좌 계좌번호가 발급된 경우 API로 모의입금 가능 여부 확인 (tno는 서버에서 fallback)
     const mightNeedMock = payment.payment_method === 'vbank' && !!payment.vbank_number;
 

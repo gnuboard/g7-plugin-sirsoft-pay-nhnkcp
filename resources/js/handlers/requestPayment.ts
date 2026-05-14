@@ -133,7 +133,22 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
         }
 
         console.error('[sirsoft-pay_nhnkcp] requestPayment error', error);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+        // axios error 의 response.data 에서 사용자 친화적 메시지 추출.
+        // G7Core.api 는 axios 기반이라 4xx/5xx 응답은 자동 reject 됨 — generic
+        // "Request failed with status code 422" 가 아니라 Laravel ValidationException
+        // 의 message / errors 필드를 우선 사용.
+        const anyErr = error as { response?: { data?: { message?: string; error?: string; errors?: Record<string, string[]> } }; message?: string };
+        const responseData = anyErr?.response?.data;
+        const firstFieldError = responseData?.errors
+            ? Object.values(responseData.errors)[0]?.[0]
+            : undefined;
+        const errorMessage =
+            responseData?.error
+            ?? responseData?.message
+            ?? firstFieldError
+            ?? (error instanceof Error ? error.message : 'Unknown error');
+
         G7Core?.state?.setLocal?.({ paymentErrorMessage: errorMessage, isSubmittingOrder: false, paymentMethod });
         G7Core?.modal?.open?.('nhnkcp_payment_error_modal');
     }
@@ -165,7 +180,19 @@ async function handleMobilePayment(
     });
 
     if (!approvalJson.success || !approvalJson.data) {
-        throw new Error(approvalJson.error ?? 'KCP 모바일 승인키 획득 실패');
+        // 서버 응답의 에러 메시지 우선순위:
+        //   1. ResponseHelper::error 의 'error' 필드 (커스텀)
+        //   2. Laravel ValidationException 의 'message' 필드 (422 응답 표준)
+        //   3. 'errors' 객체의 첫 번째 메시지 (필드별 validation 메시지)
+        //   4. fallback
+        const errors = approvalJson.errors as Record<string, string[]> | undefined;
+        const firstFieldError = errors ? Object.values(errors)[0]?.[0] : undefined;
+        throw new Error(
+            approvalJson.error
+                ?? approvalJson.message
+                ?? firstFieldError
+                ?? 'KCP 모바일 승인키 획득 실패',
+        );
     }
 
     const { pay_url, fields } = approvalJson.data as { pay_url: string; fields: Record<string, string> };
