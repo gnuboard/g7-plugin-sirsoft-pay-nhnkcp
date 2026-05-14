@@ -4,16 +4,17 @@ declare(strict_types=1);
 
 namespace Plugins\Sirsoft\PayNhnkcp\Tests\Feature\Middleware;
 
+use App\Services\PluginSettingsService;
 use Plugins\Sirsoft\PayNhnkcp\Tests\PluginTestCase;
 
 /**
  * RestrictKcpIp 미들웨어 회귀 테스트
  *
  * 적용 라우트: vbank-notify, escrow-common-notify (KCP 서버 발신 webhook)
- *   - 운영/테스트 모드 무관 항상 화이트리스트 검증
- *   - 화이트리스트 외 IP 403 차단
+ *   - 테스트 모드 (is_test_mode=true): 우회 — 개발/모의입금 흐름 허용
+ *   - 운영 모드 (is_test_mode=false): 화이트리스트 외 IP 403 차단
  *
- * 그누보드5 settle_kcp_common.php 의 IP 화이트리스트와 동일.
+ * 그누보드5 settle_kcp_common.php 의 $default['de_card_test'] 분기와 동일.
  */
 class RestrictKcpIpTest extends PluginTestCase
 {
@@ -22,6 +23,17 @@ class RestrictKcpIpTest extends PluginTestCase
     private const KCP_PANGYO_IP = '103.215.144.173';
 
     private const UNAUTHORIZED_IP = '1.2.3.4';
+
+    private function mockSettings(bool $isTestMode): void
+    {
+        $mock = $this->createMock(PluginSettingsService::class);
+        $mock->method('get')->willReturn([
+            'is_test_mode' => $isTestMode,
+            'redirect_success_url' => '/shop/orders/{orderId}/complete',
+            'redirect_fail_url'    => '/shop/checkout',
+        ]);
+        $this->app->instance(PluginSettingsService::class, $mock);
+    }
 
     private function postVbankNotify(string $remoteIp): \Illuminate\Testing\TestResponse
     {
@@ -35,15 +47,19 @@ class RestrictKcpIpTest extends PluginTestCase
             ]);
     }
 
-    public function test_blocks_unauthorized_ip(): void
+    public function test_blocks_unauthorized_ip_in_live_mode(): void
     {
+        $this->mockSettings(isTestMode: false);
+
         $response = $this->postVbankNotify(self::UNAUTHORIZED_IP);
 
         $response->assertForbidden();
     }
 
-    public function test_allows_whitelisted_kcp_ip(): void
+    public function test_allows_whitelisted_kcp_ip_in_live_mode(): void
     {
+        $this->mockSettings(isTestMode: false);
+
         $response = $this->postVbankNotify(self::KCP_WHITELIST_IP);
 
         // 미들웨어 통과 후 컨트롤러까지 도달 → 200 + KCP result HTML 응답.
@@ -52,29 +68,35 @@ class RestrictKcpIpTest extends PluginTestCase
         $this->assertStringContainsString('name="result"', $response->getContent());
     }
 
-    public function test_allows_pangyo_idc_ip(): void
+    public function test_allows_pangyo_idc_ip_in_live_mode(): void
     {
+        $this->mockSettings(isTestMode: false);
+
         $response = $this->postVbankNotify(self::KCP_PANGYO_IP);
 
         $response->assertOk();
     }
 
     /**
-     * 회귀: 테스트 환경에서도 IP 검증 — 화이트리스트 외 localhost(127.0.0.1) 도 403.
-     * 운영의 KCP testadmin 모의입금 webhook 도 동일한 KCP 발신 IP 에서 오므로 우회 불필요.
+     * 테스트 모드: 모든 IP 허용 — 개발 환경 + KCP testadmin 모의입금 webhook 흐름 보장
+     * (그누보드5 settle_kcp_common.php 의 $default['de_card_test'] 우회 동일).
      */
-    public function test_blocks_localhost_loopback(): void
+    public function test_bypasses_check_in_test_mode(): void
     {
-        $response = $this->postVbankNotify('127.0.0.1');
+        $this->mockSettings(isTestMode: true);
 
-        $response->assertForbidden();
+        $response = $this->postVbankNotify(self::UNAUTHORIZED_IP);
+
+        $response->assertOk();
     }
 
     /**
-     * 화이트리스트 8개 IP 전수 통과 — 그누보드5 settle_kcp_common.php 와 동일.
+     * 화이트리스트 8개 IP 전수 통과 (운영 모드).
      */
-    public function test_all_whitelisted_ips_pass(): void
+    public function test_all_whitelisted_ips_pass_in_live_mode(): void
     {
+        $this->mockSettings(isTestMode: false);
+
         $whitelist = [
             '203.238.36.58',
             '203.238.36.160',
