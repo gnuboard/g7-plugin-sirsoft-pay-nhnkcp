@@ -437,6 +437,27 @@ class PaymentCallbackControllerTest extends PluginTestCase
     }
 
     /**
+     * KCP testadmin 모의입금 통보는 op_cd=18 을 발신 (KCP 공식 문서엔 명시 없음, 실제 운영 확인).
+     * 그누보드5 와 동일하게 op_cd=13 (망취소) 외에는 모두 입금완료 처리.
+     */
+    public function test_vbank_notify_completes_payment_on_op_cd_18_testadmin(): void
+    {
+        $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
+
+        $response = $this->postVbankNotify(
+            $this->makeVbankNotifyPayload($order->order_number, 30000, [
+                'op_cd' => '18',
+                'ipgm_stat' => 'STIY',
+            ])
+        );
+
+        $this->assertKcpNotifyOk($response);
+
+        $order->refresh();
+        $this->assertEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
+    }
+
+    /**
      * 망취소 — op_cd=13 시 로깅만 하고 0000 응답 (정책 미정, 자동 취소 안 함).
      */
     public function test_vbank_notify_logs_op_cd_13_cancel(): void
