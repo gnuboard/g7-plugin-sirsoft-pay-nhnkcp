@@ -77,12 +77,14 @@ class UserReceiptController
         $tradeMony = (int) round((float) ($payment->paid_amount_local ?? 0));
         $method = $payment->payment_method ?? '';
 
-        // 결제수단 분류
-        $isMobile = $method === 'mobile' || $payment->payment_device === 'mobile';
-        $isCashMethod = in_array($method, ['bank_transfer', 'vbank'], true);
+        // 결제수단 분류 — KCP 영수증 cmd 는 결제수단(휴대폰결제 vs 그 외) 으로만 분기.
+        // 디바이스(PC/모바일) 와 무관 — 모바일 디바이스에서 카드결제해도 card_bill 로 가야 함.
+        // 그누보드5 settle_kcp_common.php 패턴과 일치.
+        $isPhonePayment = $method === 'phone';
+        $isCashMethod = in_array($method, ['bank', 'vbank'], true);
 
-        // 카드/계좌이체/모바일 영수증 URL
-        $billCmd = $isMobile ? 'mcash_bill' : 'card_bill';
+        // 휴대폰결제 → mcash_bill, 그 외 (card / bank / vbank) → card_bill
+        $billCmd = $isPhonePayment ? 'mcash_bill' : 'card_bill';
         $receiptUrl = $billBaseUrl . $billCmd
             . '&tno=' . urlencode($tno)
             . '&order_no=' . urlencode($orderNo)
