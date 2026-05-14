@@ -11,6 +11,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Modules\Sirsoft\Ecommerce\Exceptions\PaymentAmountMismatchException;
 use Carbon\Carbon;
+use Modules\Sirsoft\Ecommerce\Helpers\DeviceDetector;
 use Modules\Sirsoft\Ecommerce\Models\Order;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\SendsKcpNotifyResponse;
@@ -184,7 +185,7 @@ class PaymentCallbackController
                     'escw_yn' => $pgResponse['escw_yn'] ?? null,
                     'pg_raw_response' => $pgResponse,
                 ],
-                'payment_device' => $this->detectDevice($request),
+                'payment_device' => DeviceDetector::detect($request),
             ], $approvedAmt);
 
             // 에스크로 결제인 경우 is_escrow 플래그 저장
@@ -548,17 +549,4 @@ class PaymentCallbackController
         return $converted !== false ? $converted : $msg;
     }
 
-    private function detectDevice(Request $request): string
-    {
-        $userAgent = $request->userAgent() ?? '';
-        $mobileKeywords = ['Mobile', 'Android', 'iPhone', 'iPad', 'iPod'];
-
-        foreach ($mobileKeywords as $keyword) {
-            if (stripos($userAgent, $keyword) !== false) {
-                return 'mobile';
-            }
-        }
-
-        return 'pc';
-    }
 }
