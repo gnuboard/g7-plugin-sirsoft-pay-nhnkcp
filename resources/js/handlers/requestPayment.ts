@@ -133,7 +133,22 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
         }
 
         console.error('[sirsoft-pay_nhnkcp] requestPayment error', error);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+        // axios error 의 response.data 에서 사용자 친화적 메시지 추출.
+        // G7Core.api 는 axios 기반이라 4xx/5xx 응답은 자동 reject 됨 — generic
+        // "Request failed with status code 422" 가 아니라 Laravel ValidationException
+        // 의 message / errors 필드를 우선 사용.
+        const anyErr = error as { response?: { data?: { message?: string; error?: string; errors?: Record<string, string[]> } }; message?: string };
+        const responseData = anyErr?.response?.data;
+        const firstFieldError = responseData?.errors
+            ? Object.values(responseData.errors)[0]?.[0]
+            : undefined;
+        const errorMessage =
+            responseData?.error
+            ?? responseData?.message
+            ?? firstFieldError
+            ?? (error instanceof Error ? error.message : 'Unknown error');
+
         G7Core?.state?.setLocal?.({ paymentErrorMessage: errorMessage, isSubmittingOrder: false, paymentMethod });
         G7Core?.modal?.open?.('nhnkcp_payment_error_modal');
     }
