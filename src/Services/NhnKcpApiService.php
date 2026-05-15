@@ -7,7 +7,7 @@ namespace Plugins\Sirsoft\PayNhnkcp\Services;
 use App\Extension\HookManager;
 use App\Services\PluginSettingsService;
 use Illuminate\Support\Facades\Log;
-use Plugins\Sirsoft\PayNhnkcp\Exceptions\NhnNhnKcpApiException;
+use Plugins\Sirsoft\PayNhnkcp\Exceptions\NhnKcpApiException;
 
 class NhnKcpApiService
 {
@@ -149,7 +149,7 @@ class NhnKcpApiService
                 'res_msg' => $result['res_msg'] ?? '',
                 'tno' => $tno,
             ]);
-            throw new NhnNhnKcpApiException($result['res_msg'] ?? 'KCP cancel failed');
+            throw new NhnKcpApiException($result['res_msg'] ?? 'KCP cancel failed');
         }
 
         // 훅: 결제 취소 완료 후 (외부 소비자 후처리 확장 지점)
@@ -197,7 +197,7 @@ class NhnKcpApiService
                 'res_msg' => $result['res_msg'] ?? '',
                 'tno' => $tno,
             ]);
-            throw new NhnNhnKcpApiException($result['res_msg'] ?? 'KCP escrow delivery registration failed');
+            throw new NhnKcpApiException($result['res_msg'] ?? 'KCP escrow delivery registration failed');
         }
 
         return $result;
