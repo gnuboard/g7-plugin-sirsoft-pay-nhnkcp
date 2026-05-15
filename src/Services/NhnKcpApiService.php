@@ -7,7 +7,7 @@ namespace Plugins\Sirsoft\PayNhnkcp\Services;
 use App\Extension\HookManager;
 use App\Services\PluginSettingsService;
 use Illuminate\Support\Facades\Log;
-use Plugins\Sirsoft\PayNhnkcp\Exceptions\NhnKcpApiException;
+use Plugins\Sirsoft\PayNhnkcp\Exceptions\NhnNhnKcpApiException;
 
 class NhnKcpApiService
 {
@@ -149,7 +149,7 @@ class NhnKcpApiService
                 'res_msg' => $result['res_msg'] ?? '',
                 'tno' => $tno,
             ]);
-            throw new NhnKcpApiException($result['res_msg'] ?? 'KCP cancel failed');
+            throw new NhnNhnKcpApiException($result['res_msg'] ?? 'KCP cancel failed');
         }
 
         // 훅: 결제 취소 완료 후 (외부 소비자 후처리 확장 지점)
@@ -197,7 +197,7 @@ class NhnKcpApiService
                 'res_msg' => $result['res_msg'] ?? '',
                 'tno' => $tno,
             ]);
-            throw new NhnKcpApiException($result['res_msg'] ?? 'KCP escrow delivery registration failed');
+            throw new NhnNhnKcpApiException($result['res_msg'] ?? 'KCP escrow delivery registration failed');
         }
 
         return $result;
@@ -259,6 +259,20 @@ class NhnKcpApiService
         $binPath = str_replace('/', DIRECTORY_SEPARATOR, $this->binDir . '/pp_cli_exe.exe');
         $planData = 'payx_data=' . ($modxData !== '' ? 'mod_data=' . $modxData : '');
 
+        // Shell injection 방어: CLI args 의 각 값을 사전 검증 후 안전한 값만 사용.
+        // 위험 문자(`"`, 제어문자, 개행) 가 포함되면 KCP CLI 인터페이스가 깨지고 cmd.exe
+        // 인수 파싱이 조작될 수 있어 NhnKcpApiException 으로 즉시 거부.
+        $this->assertSafeCliValue($siteCd, 'site_cd');
+        $this->assertSafeCliValue($this->siteKey, 'site_key');
+        $this->assertSafeCliValue($txCd, 'tx_cd');
+        $this->assertSafeCliValue($paUrl, 'pa_url');
+        $this->assertSafeCliValue($ordrIdxx, 'ordr_idxx');
+        $this->assertSafeCliValue($encData, 'enc_data');
+        $this->assertSafeCliValue($encInfo, 'enc_info');
+        $this->assertSafeCliValue($custIp, 'cust_ip');
+        $this->assertSafeCliValue($keyPath, 'key_path');
+        $this->assertSafeCliValue($planData, 'plan_data');
+
         $args = 'site_cd=' . $siteCd . ','
             . 'site_key=' . $this->siteKey . ','
             . 'tx_cd=' . $txCd . ','
@@ -274,7 +288,8 @@ class NhnKcpApiService
             . 'log_level=' . self::LOG_LEVEL . ','
             . 'plan_data=' . $planData;
 
-        $command = '"' . $binPath . '" "' . $args . '"';
+        // escapeshellarg 로 binPath / args 각각을 안전하게 quoting (Windows 는 `"` 제거 + 큰따옴표 래핑).
+        $command = escapeshellarg($binPath) . ' ' . escapeshellarg($args);
 
         Log::debug('KCP CLI command (Windows)', ['command' => $command]);
 
@@ -312,6 +327,17 @@ class NhnKcpApiService
 
         $modxArg = $modxData !== '' ? 'mod_data=' . $modxData : '';
 
+        // CLI args 사전 검증 — Linux 도 별도 sanitization 적용해 OS 간 동일한 가드.
+        $this->assertSafeCliValue($siteCd, 'site_cd');
+        $this->assertSafeCliValue($this->siteKey, 'site_key');
+        $this->assertSafeCliValue($txCd, 'tx_cd');
+        $this->assertSafeCliValue($paUrl, 'pa_url');
+        $this->assertSafeCliValue($ordrIdxx, 'ordr_idxx');
+        $this->assertSafeCliValue($encData, 'enc_data');
+        $this->assertSafeCliValue($encInfo, 'enc_info');
+        $this->assertSafeCliValue($custIp, 'cust_ip');
+        $this->assertSafeCliValue($modxArg, 'modx_data');
+
         $args = 'home=' . $this->binDir . ','
             . 'site_cd=' . $siteCd . ','
             . 'site_key=' . $this->siteKey . ','
@@ -331,6 +357,39 @@ class NhnKcpApiService
         $command = $binExe . ' ' . escapeshellarg('-h') . ' ' . escapeshellarg($args);
 
         return (string) exec($command);
+    }
+
+    /**
+     * CLI args 의 단일 값에 shell injection 위험 문자가 없는지 검증.
+     *
+     * 거부 대상:
+     *  - 큰따옴표 (`"`) — Windows cmd.exe 의 args quoting 깨짐
+     *  - 제어문자 (개행 / 캐리지리턴 / NUL / TAB) — argv 분리/명령 종료 위험
+     *  - 백틱 (`` ` ``) — 일부 셸에서 명령 치환
+     *
+     * KCP CLI 의 정상 입력 (alphanumeric, base64, IP, URL, Windows path 등) 은
+     * 모두 통과하며, 비정상 페이로드만 차단한다.
+     *
+     * @param  string  $value  검증할 값
+     * @param  string  $key  필드 이름 (예외 메시지용)
+     *
+     * @throws KgInicisApiException 위험 문자 발견 시
+     */
+    private function assertSafeCliValue(string $value, string $key): void
+    {
+        // 큰따옴표 / 백틱 — 명시적 위험
+        if (preg_match('/["`]/', $value) === 1) {
+            throw new NhnKcpApiException(
+                "KCP CLI rejected unsafe value for {$key} (contains quote/backtick)."
+            );
+        }
+
+        // 제어문자 (NUL / LF / CR / TAB 등 0x00-0x1F + 0x7F)
+        if (preg_match('/[\x00-\x1F\x7F]/', $value) === 1) {
+            throw new NhnKcpApiException(
+                "KCP CLI rejected unsafe value for {$key} (contains control character)."
+            );
+        }
     }
 
     private function buildLiveSiteCd(string $suffix): string

@@ -115,6 +115,12 @@ class PaymentCallbackController
             ]));
         }
 
+        // Approve 성공 후 후속 처리 실패 시 PG 측 자동 cancel 을 위한 추적 변수.
+        // catch 블록에서 tno 가 set 되어 있으면 KCP 측 승인이 이미 발생한 상태이므로
+        // cancelPayment 를 호출해 PG 잔존 승인을 해제한다 (사용자 환불 보장).
+        $approvedTno = null;
+        $approvedAmtForCancel = 0;
+
         try {
             // 2단계: 주문 조회
             $order = $this->orderService->findByOrderNumber($ordrIdxx);
@@ -172,6 +178,10 @@ class PaymentCallbackController
                 ? $goodMny
                 : (int) round((float) $order->total_amount, 2);
 
+            // PG 측 승인이 확정된 시점 — 후속 처리 실패 시 cancel 필요. catch 에서 참조.
+            $approvedTno = $tno;
+            $approvedAmtForCancel = $approvedAmt;
+
             $isEscrow = ($pgResponse['escw_yn'] ?? '') === 'Y';
 
             // 4단계: 주문 완료 처리
@@ -215,6 +225,9 @@ class PaymentCallbackController
                 'actual' => $e->getActualAmount(),
             ]);
 
+            // Approve 가 이미 KCP 측에서 발생했으면 자동 취소로 PG 잔존 승인 해제
+            $this->autoCancelIfApproved($approvedTno, $ordrIdxx, $approvedAmtForCancel, 'amount_mismatch');
+
             return redirect($this->resolveFailUrl(['error' => 'amount_mismatch', 'orderId' => $ordrIdxx]));
 
         } catch (\Exception $e) {
@@ -222,6 +235,8 @@ class PaymentCallbackController
                 'ordr_idxx' => $ordrIdxx,
                 'error' => $e->getMessage(),
             ]);
+
+            $this->autoCancelIfApproved($approvedTno, $ordrIdxx, $approvedAmtForCancel, 'confirm_failed');
 
             return redirect($this->resolveFailUrl([
                 'error' => 'confirm_failed',
@@ -499,6 +514,53 @@ class PaymentCallbackController
         $urlTemplate = $settings['redirect_success_url'] ?? '/shop/orders/{orderId}/complete';
 
         return $this->absolutize(str_replace('{orderId}', $orderId, $urlTemplate));
+    }
+
+    /**
+     * Approve 가 이미 발생한 후 후속 처리 실패 시 PG 측 cancel 을 시도.
+     *
+     * KCP CLI 승인이 완료되었으나 우리 서버에서 completePayment 가 실패한 경우
+     * 사용자 카드/계좌는 PG 측에서 승인 상태로 잔존 → 환불 불가 위험. 본 메서드는
+     * cancelPayment API 로 PG 잔존 승인을 즉시 해제해 사용자 보호를 확보한다.
+     *
+     * cancel 자체가 실패해도 사용자 응답 흐름은 막지 않음 — 로깅만 수행하고
+     * 운영자가 KCP 가맹점 관리자에서 수동 처리하도록 신호.
+     */
+    private function autoCancelIfApproved(
+        ?string $tno,
+        string $ordrIdxx,
+        int $cancelAmt,
+        string $reason,
+    ): void {
+        if ($tno === null || $tno === '' || $cancelAmt <= 0) {
+            return;
+        }
+
+        try {
+            $result = $this->apiService->cancelPayment(
+                $tno,
+                $ordrIdxx,
+                $cancelAmt,
+                'auto-cancel: ' . $reason,
+            );
+
+            Log::warning('KCP: auto-cancel after post-approve failure', [
+                'tno'       => $tno,
+                'ordr_idxx' => $ordrIdxx,
+                'amount'    => $cancelAmt,
+                'reason'    => $reason,
+                'res_cd'    => $result['res_cd'] ?? null,
+                'res_msg'   => $result['res_msg'] ?? null,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('KCP: auto-cancel FAILED — manual reconciliation required', [
+                'tno'       => $tno,
+                'ordr_idxx' => $ordrIdxx,
+                'amount'    => $cancelAmt,
+                'reason'    => $reason,
+                'error'     => $e->getMessage(),
+            ]);
+        }
     }
 
     private function resolveFailUrl(array $queryParams = []): string
