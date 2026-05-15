@@ -14,6 +14,7 @@ use Carbon\Carbon;
 use Modules\Sirsoft\Ecommerce\Helpers\DeviceDetector;
 use Modules\Sirsoft\Ecommerce\Models\Order;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
+use Plugins\Sirsoft\PayNhnkcp\Concerns\PreventsReplayCallback;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\SendsKcpNotifyResponse;
 use Plugins\Sirsoft\PayNhnkcp\Http\Requests\AuthCallbackRequest;
 use Plugins\Sirsoft\PayNhnkcp\Http\Requests\VbankNotifyRequest;
@@ -28,6 +29,7 @@ use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
  */
 class PaymentCallbackController
 {
+    use PreventsReplayCallback;
     use SendsKcpNotifyResponse;
 
     private const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
@@ -157,6 +159,13 @@ class PaymentCallbackController
             }
 
             $tno = $pgResponse['tno'] ?? ($validated['tno'] ?? '');
+
+            // Replay 가드: 동일 tno 가 이미 paid 상태면 중복 처리하지 않고 성공 페이지로 복귀
+            if ($this->wasAlreadyPaid($tno)) {
+                $this->logReplayDetected($tno, $ordrIdxx, 'authCallback (card)');
+
+                return redirect($this->resolveSuccessUrl($ordrIdxx));
+            }
 
             // KCP는 CLI 응답에 good_mny가 없는 경우가 많으므로 주문 금액으로 검증
             $approvedAmt = $goodMny > 0
