@@ -36,6 +36,7 @@ class RestrictKcpIp
         '103.215.144.173',
         '103.215.144.174',
         '103.215.145.30',
+        '210.122.72.173',
     ];
 
     private const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
