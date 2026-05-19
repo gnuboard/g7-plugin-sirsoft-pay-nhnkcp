@@ -29,7 +29,28 @@ class NhnKcpApiService
 
     private const LIVE_SITE_CD_PREFIX = 'SR';
 
-    private const LOG_LEVEL = '3';
+    /**
+     * KCP CLI log_level — '1' (오류만).
+     *
+     * '3' (verbose) 은 TX_ENDED 라인에 PG 응답 페이로드 전체(card_no 평문 등) 를
+     * 기록하므로 PCI DSS 위반 위험. LOG_DISABLED_PATH 와 함께 이중 안전장치.
+     */
+    private const LOG_LEVEL = '1';
+
+    /**
+     * KCP CLI log_path — 의도적으로 존재하지 않는 경로.
+     *
+     * gnuboard5 의 settle_kcp.inc.php 가 검증된 패턴 (`$g_conf_log_dir = '/home100/kcp'`).
+     * CLI 가 디렉토리 생성을 시도하지만 실패하므로 로그 작성 단계가 silent skip 된다.
+     * 결과:
+     *  - bin/log/YYYYMM/*.log 자체가 생성되지 않음
+     *  - 카드번호 / 사업자번호 등 결제 메타가 디스크에 잔존하지 않음 (PCI DSS 3.4)
+     *  - 비표준 배포(DocumentRoot=프로젝트 루트)에서 직접 다운로드 위험 자체가 부재
+     *
+     * 디버깅 필요 시 임시로 실제 경로를 지정해 활성화 가능하지만, 그 경우 결제
+     * 메타 평문 잔존을 운영자가 책임져야 함 (PCI 운영자 동의 필요).
+     */
+    private const LOG_DISABLED_PATH = '/home100/kcp';
 
     private bool $isTest;
 
@@ -289,7 +310,7 @@ class NhnKcpApiService
             . 'trace_no=,'
             . 'cust_ip=' . $custIp . ','
             . 'key_path=' . $keyPath . ','
-            . 'log_path=,'
+            . 'log_path=' . self::LOG_DISABLED_PATH . ','
             . 'log_level=' . self::LOG_LEVEL . ','
             . 'plan_data=' . $planData;
 
@@ -361,7 +382,7 @@ class NhnKcpApiService
             . 'trace_no=,'
             . 'cust_ip=' . $custIp . ','
             . 'modx_data=' . $modxArg . ','
-            . 'log_path=,'
+            . 'log_path=' . self::LOG_DISABLED_PATH . ','
             . 'log_level=' . self::LOG_LEVEL . ','
             . 'opt=';
 

@@ -306,4 +306,69 @@ class NhnKcpApiServiceTest extends PluginTestCase
 
         $method->invoke($service, '/tmp/nonexistent_kcp_cli_' . uniqid());
     }
+
+    /**
+     * KCP CLI 가 디스크에 결제 로그를 남기지 않도록 (PCI DSS 평문 카드번호 저장 방지) 보장.
+     *
+     * 기존 동작: log_path 가 빈 문자열 → CLI 가 기본 경로(bin/log/)에 verbose 로그 작성.
+     *   TX_ENDED 라인에 card_no, app_no, tno 등 결제 메타 평문 누적.
+     * 수정 동작: gnuboard5 검증 패턴 — 의도적으로 존재하지 않는 경로(/home100/kcp)를
+     *   전달하면 CLI 가 디렉토리 생성 실패 → 로그 작성 단계 silent skip.
+     *   추가로 log_level=1 (오류만) 로 낮춰 미래에 누가 log_path 를 살려도 카드번호 같은
+     *   verbose 페이로드가 자동으로 차단되도록 이중 안전장치.
+     */
+    public function test_log_path_is_intentionally_nonexistent_to_disable_disk_logging(): void
+    {
+        $reflection = new \ReflectionClass(NhnKcpApiService::class);
+        $this->assertTrue(
+            $reflection->hasConstant('LOG_DISABLED_PATH'),
+            'LOG_DISABLED_PATH 상수가 정의되어 있어야 함 (디스크 로깅 차단 의도 명시)',
+        );
+        $this->assertEquals(
+            '/home100/kcp',
+            $reflection->getConstant('LOG_DISABLED_PATH'),
+            'gnuboard5 의 검증된 패턴(/home100/kcp) 과 일치해야 함',
+        );
+        $this->assertFalse(
+            is_dir($reflection->getConstant('LOG_DISABLED_PATH')),
+            '경로가 실제 시스템에 존재하지 않아야 (로그 작성 silent skip 보장)',
+        );
+    }
+
+    public function test_log_level_is_minimal_to_prevent_pii_leak(): void
+    {
+        $reflection = new \ReflectionClass(NhnKcpApiService::class);
+        $logLevel = $reflection->getConstant('LOG_LEVEL');
+
+        $this->assertSame(
+            '1',
+            $logLevel,
+            'LOG_LEVEL=1 (오류만) 이어야 함 — verbose(3) 는 응답 페이로드에 카드번호 평문 포함하므로 PCI DSS 위반 위험',
+        );
+    }
+
+    public function test_cli_args_include_disabled_log_path_constant(): void
+    {
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            $this->markTestSkipped('Linux CLI 경로 테스트 — Windows 분기 별도 검증.');
+        }
+
+        $reflection = new \ReflectionClass(NhnKcpApiService::class);
+        $source = file_get_contents($reflection->getFileName());
+
+        // executeCliLinux 와 executeCliWindows 모두 LOG_DISABLED_PATH 참조해야 함.
+        $logPathReferences = substr_count($source, "'log_path=' . self::LOG_DISABLED_PATH");
+        $this->assertGreaterThanOrEqual(
+            2,
+            $logPathReferences,
+            '두 OS 분기(executeCliLinux + executeCliWindows) 모두 LOG_DISABLED_PATH 를 사용해야 함',
+        );
+
+        // 기존 빈 값 패턴(log_path=,)이 남아있지 않아야 함.
+        $this->assertStringNotContainsString(
+            "'log_path=,'",
+            $source,
+            '빈 log_path 패턴이 남아있으면 CLI 가 기본 경로(bin/log/)에 로그 작성 회귀',
+        );
+    }
 }
