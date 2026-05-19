@@ -420,7 +420,19 @@ class ShippingAndCouponCancellationTest extends PluginTestCase
 
     public function test_partial_cancel_with_shipping_creates_refund_record(): void
     {
-        $this->expectKcpCancelOnce();
+        $mock = $this->createMock(NhnKcpApiService::class);
+        $mock->expects($this->once())
+            ->method('cancelPayment')
+            ->with(
+                self::TNO,
+                $this->anything(),
+                23000,
+                $this->anything(),
+                true,
+                43000,
+            )
+            ->willReturn(self::CANCEL_SUCCESS);
+        $this->app->instance(NhnKcpApiService::class, $mock);
 
         $data    = $this->createKcpOrderWithShipping(optionCount: 2, unitPrice: 20000, shippingFee: 3000);
         $order   = $data['order'];
@@ -441,6 +453,8 @@ class ShippingAndCouponCancellationTest extends PluginTestCase
 
         $refund = OrderRefund::where('order_id', $order->id)->first();
         $this->assertNotNull($refund, '부분취소 후 환불 레코드가 생성되어야 합니다');
+        $this->assertEquals(3000, (float) $refund->refund_shipping_amount, '부분취소 시 배송비 차액 3,000원이 포함되어야 합니다');
+        $this->assertEquals(23000, (float) $refund->refund_amount, '상품(20,000) + 배송비 차액(3,000) = 23,000원 환불');
     }
 
     public function test_partial_cancel_without_pg_never_calls_kcp_api(): void
