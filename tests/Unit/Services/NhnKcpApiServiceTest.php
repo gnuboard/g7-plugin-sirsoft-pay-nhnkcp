@@ -230,4 +230,80 @@ class NhnKcpApiServiceTest extends PluginTestCase
                 && ! str_contains($request->url(), 'stgapi');
         });
     }
+
+    /**
+     * 결제 직전 CLI 바이너리 실행 권한 자가 복구 (9502 회귀 차단).
+     *
+     * 시나리오: plugin:update 후 활성 디렉토리 pp_cli/pp_cli_x64 가 _bundled 권한 (0664) 으로
+     * 회귀해 실행 권한이 사라진 상태에서 결제 시도. ensureCliExecutable() 가 결제 직전
+     * 자동으로 chmod 0755 + stat 캐시 무효화를 수행하여 9502 발생을 차단해야 한다.
+     *
+     * 단위 테스트는 ensureCliExecutable() 만 reflection 으로 직접 호출하고
+     * (실제 KCP CLI 실행은 외부 의존이라 단위 범위 밖) 권한 변경 + 멱등성 + 실패 분기
+     * 3가지 동작을 검증한다.
+     */
+    public function test_ensure_cli_executable_promotes_0664_to_0755(): void
+    {
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            $this->markTestSkipped('파일 모드 비트가 Windows 와 호환되지 않음.');
+        }
+
+        $tmpFile = tempnam(sys_get_temp_dir(), 'kcp_cli_test_');
+        $this->assertNotFalse($tmpFile);
+        file_put_contents($tmpFile, '#!/bin/sh' . PHP_EOL . 'exit 0' . PHP_EOL);
+        chmod($tmpFile, 0664);
+        $this->assertFalse(is_executable($tmpFile), 'precondition: 0664 는 실행 권한 없음');
+
+        try {
+            $service = $this->makeService();
+            $method = (new \ReflectionClass($service))->getMethod('ensureCliExecutable');
+            $method->setAccessible(true);
+            $method->invoke($service, $tmpFile);
+
+            clearstatcache(true, $tmpFile);
+            $this->assertTrue(is_executable($tmpFile), 'chmod 0755 로 자가 복구되어야 함');
+            $mode = substr(sprintf('%o', fileperms($tmpFile)), -4);
+            $this->assertSame('0755', $mode, "권한이 0755 로 정확히 설정되어야 함 (현재: {$mode})");
+        } finally {
+            @unlink($tmpFile);
+        }
+    }
+
+    public function test_ensure_cli_executable_is_idempotent_when_already_executable(): void
+    {
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            $this->markTestSkipped('파일 모드 비트가 Windows 와 호환되지 않음.');
+        }
+
+        $tmpFile = tempnam(sys_get_temp_dir(), 'kcp_cli_test_');
+        $this->assertNotFalse($tmpFile);
+        file_put_contents($tmpFile, '#!/bin/sh' . PHP_EOL . 'exit 0' . PHP_EOL);
+        chmod($tmpFile, 0755);
+
+        try {
+            $service = $this->makeService();
+            $method = (new \ReflectionClass($service))->getMethod('ensureCliExecutable');
+            $method->setAccessible(true);
+            // 호출이 예외 없이 통과해야 하며, 권한도 그대로여야 함.
+            $method->invoke($service, $tmpFile);
+
+            clearstatcache(true, $tmpFile);
+            $mode = substr(sprintf('%o', fileperms($tmpFile)), -4);
+            $this->assertSame('0755', $mode, '이미 실행 가능한 파일의 권한은 변경되지 않아야 함');
+        } finally {
+            @unlink($tmpFile);
+        }
+    }
+
+    public function test_ensure_cli_executable_throws_when_binary_missing(): void
+    {
+        $service = $this->makeService();
+        $method = (new \ReflectionClass($service))->getMethod('ensureCliExecutable');
+        $method->setAccessible(true);
+
+        $this->expectException(\Plugins\Sirsoft\PayNhnkcp\Exceptions\NhnKcpApiException::class);
+        $this->expectExceptionMessageMatches('/CLI 바이너리/');
+
+        $method->invoke($service, '/tmp/nonexistent_kcp_cli_' . uniqid());
+    }
 }
