@@ -257,6 +257,11 @@ class NhnKcpApiService
         $siteCd = $siteCd !== '' ? $siteCd : $this->siteCd;
         $keyPath = str_replace('/', DIRECTORY_SEPARATOR, $this->binDir . '/pub.key');
         $binPath = str_replace('/', DIRECTORY_SEPARATOR, $this->binDir . '/pp_cli_exe.exe');
+
+        // 실행 권한 자가 복구: plugin:update 후 _bundled 의 0664 권한이 활성 디렉토리에 그대로
+        // 회귀해 9502 ("연동 모듈 호출 오류") 가 발생하던 회귀를 결제 hot path 에서 차단.
+        // Windows 에서는 chmod 자체는 no-op 에 가깝지만, is_file 가드는 의미 있음.
+        $this->ensureCliExecutable($binPath);
         $planData = 'payx_data=' . ($modxData !== '' ? 'mod_data=' . $modxData : '');
 
         // Shell injection 방어: CLI args 의 각 값을 사전 검증 후 안전한 값만 사용.
@@ -325,6 +330,12 @@ class NhnKcpApiService
             ? $this->binDir . '/pp_cli'
             : $this->binDir . '/pp_cli_x64';
 
+        // 실행 권한 자가 복구: plugin:update 후 _bundled 의 0664 권한이 활성 디렉토리에 그대로
+        // 회귀해 exec() 가 빈 결과를 반환 → 9502 ("연동 모듈 호출 오류") 가 발생하던 회귀를
+        // 결제 hot path 에서 차단. HealthCheckController 의 admin UI 진입 시점 복구와는 별개로
+        // 사용자 결제 시점 안전망 역할.
+        $this->ensureCliExecutable($binExe);
+
         $modxArg = $modxData !== '' ? 'mod_data=' . $modxData : '';
 
         // CLI args 사전 검증 — Linux 도 별도 sanitization 적용해 OS 간 동일한 가드.
@@ -357,6 +368,60 @@ class NhnKcpApiService
         $command = $binExe . ' ' . escapeshellarg('-h') . ' ' . escapeshellarg($args);
 
         return (string) exec($command);
+    }
+
+    /**
+     * KCP CLI 바이너리의 실행 권한 자가 복구.
+     *
+     * plugin:update 가 _bundled 의 0664 권한을 활성 디렉토리로 그대로 복사해
+     * 실행 권한이 사라지면 exec() 가 빈 결과를 반환 → executeCli() 가 res_cd=9502
+     * fallback 으로 떨어진다. 결제 진입 직전 호출하여 권한이 부족하면 chmod 0755
+     * 로 복구, stat 캐시 무효화 후 재검증한다.
+     *
+     * 복구 실패 시 (PHP-FPM 이 파일 소유자가 아닌 sudo 환경 등) NhnKcpApiException
+     * 으로 fail-fast — exec() 가 9502 로 끝나기 전에 운영자가 원인 (sudo chmod 필요)
+     * 을 명확히 알 수 있다.
+     *
+     * @param  string  $binPath  KCP CLI 바이너리 절대 경로
+     * @return void
+     *
+     * @throws NhnKcpApiException 바이너리 누락 또는 실행 권한 복구 실패 시
+     */
+    private function ensureCliExecutable(string $binPath): void
+    {
+        if (! is_file($binPath)) {
+            throw new NhnKcpApiException("KCP CLI 바이너리 누락: {$binPath}");
+        }
+
+        clearstatcache(true, $binPath);
+        if (is_executable($binPath)) {
+            return;
+        }
+
+        $beforeMode = substr(sprintf('%o', fileperms($binPath)), -4);
+        $chmodOk = @chmod($binPath, 0755);
+        clearstatcache(true, $binPath);
+
+        if ($chmodOk && is_executable($binPath)) {
+            Log::info('KCP: CLI 바이너리 실행 권한 자가 복구', [
+                'path' => $binPath,
+                'before' => $beforeMode,
+                'after' => '0755',
+            ]);
+
+            return;
+        }
+
+        Log::error('KCP: CLI 실행 권한 자가 복구 실패 — sudo chmod 필요', [
+            'path' => $binPath,
+            'mode' => $beforeMode,
+            'owner' => fileowner($binPath),
+            'php_uid' => function_exists('posix_geteuid') ? posix_geteuid() : null,
+        ]);
+
+        throw new NhnKcpApiException(
+            "KCP CLI 바이너리 실행 권한 부족 — 운영자 조치 필요 (sudo chmod 755 {$binPath})"
+        );
     }
 
     /**
