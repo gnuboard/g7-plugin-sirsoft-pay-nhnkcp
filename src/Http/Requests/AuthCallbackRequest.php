@@ -38,7 +38,7 @@ class AuthCallbackRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'res_cd' => ['present', 'nullable', 'string'],
+            'res_cd' => ['required', 'string'],
             'res_msg' => ['nullable', 'string'],
             'enc_data' => ['nullable', 'string'],
             'enc_info' => ['nullable', 'string'],

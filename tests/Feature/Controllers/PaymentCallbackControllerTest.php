@@ -156,45 +156,6 @@ class PaymentCallbackControllerTest extends PluginTestCase
         $this->assertEquals('APP12345', $payment->card_approval_number);
     }
 
-    public function test_auth_callback_stores_only_sanitized_pg_response_fields(): void
-    {
-        $order = $this->createTestOrder(50000);
-        $this->mockPluginSettings();
-
-        $tno = 'KCP_TNO_SANITIZED';
-        $this->mockApiService(array_merge(
-            $this->makeCliResponse($tno, $order->order_number, 50000),
-            [
-                'buyr_name' => '홍길동',
-                'buyr_mail' => 'buyer@example.test',
-                'buyr_tel1' => '01012345678',
-                'account' => '1234567890123456',
-                'unexpected_sensitive' => 'store-me-not',
-            ]
-        ));
-
-        $response = $this->post(
-            '/plugins/sirsoft-pay_nhnkcp/payment/callback',
-            $this->makeCallbackParams($order->order_number, 50000, ['tno' => $tno])
-        );
-
-        $response->assertRedirect("/shop/orders/{$order->order_number}/complete");
-
-        $payment = $order->payment;
-        $payment->refresh();
-
-        $meta = $payment->payment_meta;
-        $this->assertTrue($meta['pg_response_sanitized'] ?? false);
-        $this->assertSame($tno, $meta['pg_raw_response']['tno'] ?? null);
-        $this->assertSame('APP12345', $meta['pg_raw_response']['app_no'] ?? null);
-        $this->assertArrayNotHasKey('card_no', $meta['pg_raw_response']);
-        $this->assertArrayNotHasKey('buyr_name', $meta['pg_raw_response']);
-        $this->assertArrayNotHasKey('buyr_mail', $meta['pg_raw_response']);
-        $this->assertArrayNotHasKey('buyr_tel1', $meta['pg_raw_response']);
-        $this->assertArrayNotHasKey('account', $meta['pg_raw_response']);
-        $this->assertArrayNotHasKey('unexpected_sensitive', $meta['pg_raw_response']);
-    }
-
     // ===== 과세/비과세 시나리오 =====
 
     public function test_fully_taxable_order_payment_completes(): void
@@ -570,35 +531,6 @@ class PaymentCallbackControllerTest extends PluginTestCase
         $this->assertEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
     }
 
-    public function test_vbank_notify_stores_only_sanitized_pg_response_fields(): void
-    {
-        $order = $this->createTestOrder(50000, [], PaymentMethodEnum::VBANK);
-
-        $response = $this->postVbankNotify(
-            $this->makeVbankNotifyPayload($order->order_number, 50000, [
-                'tno' => 'KCP_VBANK_TNO_SANITIZED',
-                'ipgm_name' => '실입금자',
-                'remitter' => '송금자',
-                'account' => 'T9876543210',
-                'unexpected_sensitive' => 'store-me-not',
-            ])
-        );
-
-        $this->assertKcpNotifyOk($response);
-
-        $payment = $order->payment;
-        $payment->refresh();
-
-        $meta = $payment->payment_meta;
-        $this->assertTrue($meta['pg_response_sanitized'] ?? false);
-        $this->assertSame('KCP_VBANK_TNO_SANITIZED', $meta['pg_raw_response']['tno'] ?? null);
-        $this->assertSame($order->order_number, $meta['pg_raw_response']['order_no'] ?? null);
-        $this->assertArrayNotHasKey('ipgm_name', $meta['pg_raw_response']);
-        $this->assertArrayNotHasKey('remitter', $meta['pg_raw_response']);
-        $this->assertArrayNotHasKey('account', $meta['pg_raw_response']);
-        $this->assertArrayNotHasKey('unexpected_sensitive', $meta['pg_raw_response']);
-    }
-
     // ===== 가상계좌 발급 (handleVbankIssued) 성공 처리 =====
 
     /**
@@ -648,53 +580,6 @@ class PaymentCallbackControllerTest extends PluginTestCase
         $this->assertEquals('NHN KCP', $payment->vbank_holder);
         $this->assertNotNull($payment->vbank_due_at);
         $this->assertNotNull($payment->vbank_issued_at);
-    }
-
-    public function test_vbank_issue_stores_only_sanitized_pg_response_fields(): void
-    {
-        $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
-        $this->mockPluginSettings();
-
-        $tno = 'KCP_VBANK_ISSUE_SANITIZED';
-        $this->mockApiService([
-            'res_cd' => 'V000',
-            'res_msg' => '가상계좌가 발급되었습니다.',
-            'tno' => $tno,
-            'bankname' => 'NH농협',
-            'account' => 'T1109260001455',
-            'depositor' => 'NHN KCP',
-            'va_date' => '20260516235959',
-            'bankcode' => 'BK11',
-            'app_time' => '20260513174624',
-            'buyr_name' => '홍길동',
-            'buyr_mail' => 'buyer@example.test',
-            'card_no' => '4330****1234',
-            'unexpected_sensitive' => 'store-me-not',
-        ]);
-
-        $response = $this->post(
-            '/plugins/sirsoft-pay_nhnkcp/payment/callback',
-            $this->makeCallbackParams($order->order_number, 30000, [
-                'tno' => $tno,
-                'use_pay_method' => 'VCNT',
-            ])
-        );
-
-        $response->assertRedirect("/shop/orders/{$order->order_number}/complete");
-
-        $payment = $order->payment;
-        $payment->refresh();
-
-        $meta = $payment->payment_meta;
-        $this->assertTrue($meta['pg_response_sanitized'] ?? false);
-        $this->assertSame($tno, $meta['pg_raw_response']['tno'] ?? null);
-        $this->assertSame('NH농협', $meta['pg_raw_response']['bankname'] ?? null);
-        $this->assertArrayNotHasKey('account', $meta['pg_raw_response']);
-        $this->assertArrayNotHasKey('depositor', $meta['pg_raw_response']);
-        $this->assertArrayNotHasKey('buyr_name', $meta['pg_raw_response']);
-        $this->assertArrayNotHasKey('buyr_mail', $meta['pg_raw_response']);
-        $this->assertArrayNotHasKey('card_no', $meta['pg_raw_response']);
-        $this->assertArrayNotHasKey('unexpected_sensitive', $meta['pg_raw_response']);
     }
 
     // ===== 가상계좌 발급 (handleVbankIssued) 실패 처리 =====

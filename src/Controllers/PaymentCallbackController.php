@@ -15,7 +15,6 @@ use Modules\Sirsoft\Ecommerce\Helpers\DeviceDetector;
 use Modules\Sirsoft\Ecommerce\Models\Order;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\PreventsReplayCallback;
-use Plugins\Sirsoft\PayNhnkcp\Concerns\SanitizesPgResponse;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\SendsKcpNotifyResponse;
 use Plugins\Sirsoft\PayNhnkcp\Http\Requests\AuthCallbackRequest;
 use Plugins\Sirsoft\PayNhnkcp\Http\Requests\VbankNotifyRequest;
@@ -31,7 +30,6 @@ use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
 class PaymentCallbackController
 {
     use PreventsReplayCallback;
-    use SanitizesPgResponse;
     use SendsKcpNotifyResponse;
 
     private const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
@@ -50,52 +48,6 @@ class PaymentCallbackController
     private const KCP_OP_CD_DEPOSIT_RESEND = '01';
 
     private const KCP_OP_CD_DEPOSIT_CANCEL = '13';
-
-    private const AUTH_RESPONSE_KEYS = [
-        'res_cd',
-        'res_msg',
-        'tno',
-        'ordr_idxx',
-        'good_mny',
-        'use_pay_method',
-        'app_time',
-        'app_no',
-        'card_cd',
-        'card_name',
-        'quota',
-        'noinf',
-        'escw_yn',
-        'bank_code',
-        'bank_name',
-        'cash_yn',
-        'receipt_no',
-    ];
-
-    private const VBANK_NOTIFY_RESPONSE_KEYS = [
-        'site_cd',
-        'tno',
-        'order_no',
-        'tx_cd',
-        'tx_tm',
-        'ipgm_mnyx',
-        'bank_code',
-        'op_cd',
-        'noti_id',
-    ];
-
-    private const VBANK_ISSUE_RESPONSE_KEYS = [
-        'res_cd',
-        'res_msg',
-        'tno',
-        'bankname',
-        'bank_name',
-        'bankcode',
-        'bank_code',
-        'va_date',
-        'vnbank_expire_date',
-        'app_time',
-        'use_pay_method',
-    ];
 
     public function __construct(
         private readonly OrderProcessingService $orderService,
@@ -123,7 +75,7 @@ class PaymentCallbackController
     {
         $validated = $request->validated();
 
-        $resCd = (string) ($validated['res_cd'] ?? '');
+        $resCd = $validated['res_cd'];
         $resMsg = $this->decodeKcpMessage($validated['res_msg'] ?? '');
         $encData = $validated['enc_data'] ?? '';  // 모바일 취소 시 미포함
         $encInfo = $validated['enc_info'] ?? '';  // 모바일 취소 시 미포함
@@ -250,8 +202,7 @@ class PaymentCallbackController
                     'bank_name' => $pgResponse['bank_name'] ?? null,
                     'vnbank_expire_date' => $pgResponse['vnbank_expire_date'] ?? null,
                     'escw_yn' => $pgResponse['escw_yn'] ?? null,
-                    'pg_response_sanitized' => true,
-                    'pg_raw_response' => $this->sanitizePgResponse($pgResponse, self::AUTH_RESPONSE_KEYS),
+                    'pg_raw_response' => $pgResponse,
                 ],
                 'payment_device' => DeviceDetector::detect($request),
             ], $approvedAmt);
@@ -376,8 +327,7 @@ class PaymentCallbackController
                     'ipgm_name' => $validated['ipgm_name'] ?? null,
                     'remitter' => $validated['remitter'] ?? null,
                     'ipgm_time' => $validated['tx_tm'] ?? null,
-                    'pg_response_sanitized' => true,
-                    'pg_raw_response' => $this->sanitizePgResponse($validated, self::VBANK_NOTIFY_RESPONSE_KEYS),
+                    'pg_raw_response' => $validated,
                 ],
             ], $ipgmMny);
 
@@ -538,16 +488,7 @@ class PaymentCallbackController
                 'vbank_due_at'    => $vbankDueAt,
                 'vbank_issued_at' => now(),
                 'payment_device'  => $isMobile ? 'mobile' : 'pc',
-                'payment_meta'    => [
-                    'result_code' => $pgResponse['res_cd'] ?? null,
-                    'tno' => $tno ?: null,
-                    'bankname' => $bankname,
-                    'bankcode' => $pgResponse['bankcode'] ?? $pgResponse['bank_code'] ?? null,
-                    'va_date' => $pgResponse['va_date'] ?? $pgResponse['vnbank_expire_date'] ?? null,
-                    'app_time' => $pgResponse['app_time'] ?? null,
-                    'pg_response_sanitized' => true,
-                    'pg_raw_response' => $this->sanitizePgResponse($pgResponse, self::VBANK_ISSUE_RESPONSE_KEYS),
-                ],
+                'payment_meta'    => $pgResponse,
             ], fn ($v) => $v !== null));
         } catch (\Exception $e) {
             Log::error('KCP: failed to save vbank info to OrderPayment', [

@@ -65,9 +65,9 @@ class AdminTransactionController extends AdminBaseController
             'use_pay_method' => $meta['use_pay_method'] ?? $rawResponse['use_pay_method'] ?? null,
             'app_time'       => $meta['app_time'] ?? $rawResponse['app_time'] ?? null,
             'res_cd'         => $meta['res_cd'] ?? $rawResponse['res_cd'] ?? '0000',
-            'card_name'      => $rawResponse['card_name'] ?? $meta['card_name'] ?? $rawResponse['bank_name'] ?? $meta['bank_name'] ?? null,
-            'account'        => $meta['account'] ?? null,
-            'bank_name'      => $rawResponse['bank_name'] ?? $meta['bank_name'] ?? null,
+            'card_name'      => $rawResponse['card_name'] ?? $rawResponse['bank_name'] ?? null,
+            'account'        => $rawResponse['account'] ?? null,
+            'bank_name'      => $rawResponse['bank_name'] ?? null,
             '_is_test_mode'  => $isTest,
         ]);
     }
