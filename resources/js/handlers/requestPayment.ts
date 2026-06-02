@@ -1,5 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import {
+    PaymentCloseReportContext,
+    reportPaymentWindowClosed,
+} from '../paymentCloseReport';
+
 interface PgPaymentData {
     order_number: string;
     order_name: string;
@@ -26,6 +31,7 @@ interface ClientConfig {
     sdk_url: string;
     callback_urls: {
         callback: string;
+        close_report?: string;
     };
     vbank_expire_days?: number;
     use_escrow?: boolean;
@@ -107,6 +113,7 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
     const isEasyPay = typeof paymentMethod === 'string' && paymentMethod.startsWith('nhnkcp_');
 
     const G7Core = (window as any).G7Core;
+    let closeReportContext: PaymentCloseReportContext | null = null;
 
     try {
         // 1. Client Config API 호출
@@ -118,6 +125,14 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
         }
 
         const config: ClientConfig = configJson.data;
+        closeReportContext = {
+            closeReportUrl: config.callback_urls.close_report,
+            oid: pgPaymentData.order_number,
+            price: Number(pgPaymentData.amount),
+            buyer_email: pgPaymentData.customer_email ?? '',
+            buyer_phone: pgPaymentData.customer_phone ?? '',
+            payment_method: paymentMethod,
+        };
         const callbackUrl = window.location.origin + config.callback_urls.callback;
 
         if (isMobileDevice()) {
@@ -128,6 +143,9 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
 
     } catch (error: unknown) {
         if (error instanceof KcpCancelledError) {
+            if (closeReportContext) {
+                await reportPaymentWindowClosed(closeReportContext, error.message || 'kcp-window-closed');
+            }
             G7Core?.state?.setLocal?.({ isSubmittingOrder: false, paymentMethod });
             return;
         }

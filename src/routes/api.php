@@ -6,6 +6,7 @@ use Plugins\Sirsoft\PayNhnkcp\Controllers\AdminOrderListController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\AdminTransactionController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\HealthCheckController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\MobileApprovalController;
+use Plugins\Sirsoft\PayNhnkcp\Controllers\PaymentCloseReportController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\UserReceiptController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\UserVbankMockDepositController;
 
@@ -18,6 +19,10 @@ use Plugins\Sirsoft\PayNhnkcp\Controllers\UserVbankMockDepositController;
 | 미들웨어: api (PluginRouteServiceProvider 자동 적용)
 |
 */
+
+// PC 결제창 닫힘 보고 — 주문 컨텍스트 검증 후 결제 실패/취소 이력 기록
+Route::post('/payment/close-report', [PaymentCloseReportController::class, 'store'])
+    ->name('payment.close-report');
 
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/user/orders/{orderNumber}/receipt', [UserReceiptController::class, 'show'])

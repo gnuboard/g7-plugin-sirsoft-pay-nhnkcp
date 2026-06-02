@@ -121,6 +121,7 @@ class RegisterPgProviderListener implements HookListenerInterface
             'sdk_url' => $sdkUrl,
             'callback_urls' => [
                 'callback' => '/plugins/sirsoft-pay_nhnkcp/payment/callback',
+                'close_report' => '/plugins/sirsoft-pay_nhnkcp/payment/close-report',
             ],
             'enabled_easy_pays' => $enabledEasyPays,
             'vbank_expire_days' => (int) ($settings['vbank_expire_days'] ?? 3),
