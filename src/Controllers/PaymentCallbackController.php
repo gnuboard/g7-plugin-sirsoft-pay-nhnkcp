@@ -15,6 +15,7 @@ use Modules\Sirsoft\Ecommerce\Helpers\DeviceDetector;
 use Modules\Sirsoft\Ecommerce\Models\Order;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\PreventsReplayCallback;
+use Plugins\Sirsoft\PayNhnkcp\Concerns\RecordsPaymentWindowClosure;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\SanitizesPgResponse;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\SendsKcpNotifyResponse;
 use Plugins\Sirsoft\PayNhnkcp\Http\Requests\AuthCallbackRequest;
@@ -31,6 +32,7 @@ use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
 class PaymentCallbackController
 {
     use PreventsReplayCallback;
+    use RecordsPaymentWindowClosure;
     use SanitizesPgResponse;
     use SendsKcpNotifyResponse;
 
@@ -150,6 +152,13 @@ class PaymentCallbackController
                 'res_msg' => $resMsg,
                 'is_cancelled' => $isCancelled,
             ]);
+
+            $this->markAuthPhaseFailureIfOrderMatches(
+                $ordrIdxx,
+                $goodMny > 0 ? $goodMny : null,
+                $resCd !== '' ? $resCd : 'USER_CANCEL',
+                $resMsg,
+            );
 
             // 사용자 취소는 오류 없이 체크아웃으로 복귀
             if ($isCancelled) {
@@ -565,6 +574,41 @@ class PaymentCallbackController
         }
 
         return redirect($this->resolveSuccessUrl($ordrIdxx));
+    }
+
+    private function markAuthPhaseFailureIfOrderMatches(
+        string $ordrIdxx,
+        ?int $amount,
+        string $failureCode,
+        string $failureMessage,
+    ): void {
+        if (trim($ordrIdxx) === '' || $amount === null || $amount < 1) {
+            return;
+        }
+
+        try {
+            $order = $this->orderService->findByOrderNumber($ordrIdxx);
+            if (! $order || $amount !== $this->expectedPaymentPrice($order)) {
+                return;
+            }
+
+            $message = trim($failureMessage) !== ''
+                ? $failureMessage
+                : 'NHN KCP 결제창이 완료되지 않았습니다.';
+
+            $this->markPaymentWindowClosed(
+                $this->orderService,
+                $order,
+                $failureCode !== '' ? $failureCode : 'USER_CANCEL',
+                $message,
+                $message,
+            );
+        } catch (\Throwable $e) {
+            Log::warning('KCP: failed to record auth phase payment cancellation', [
+                'ordr_idxx' => $ordrIdxx,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function resolveSuccessUrl(string $orderId): string

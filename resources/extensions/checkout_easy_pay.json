@@ -16,7 +16,7 @@
             "name": "Modal",
             "props": {
                 "title": "$t:sirsoft-pay_nhnkcp.payment_error.title",
-                "size": "sm",
+                "size": "small",
                 "showCloseButton": true
             },
             "children": [

@@ -299,6 +299,28 @@ class PaymentCallbackControllerTest extends PluginTestCase
         $this->assertStringNotContainsString('error=', $response->headers->get('Location'));
     }
 
+    public function test_auth_callback_records_user_cancel_when_amount_matches_order(): void
+    {
+        $order = $this->createTestOrder(50000);
+        $this->mockPluginSettings();
+
+        $response = $this->post('/plugins/sirsoft-pay_nhnkcp/payment/callback', [
+            'res_cd' => '3001',
+            'res_msg' => '사용자취소',
+            'ordr_idxx' => $order->order_number,
+            'good_mny' => 50000,
+        ]);
+
+        $response->assertRedirect('/shop/checkout');
+        $this->assertStringNotContainsString('error=', $response->headers->get('Location'));
+
+        $order->refresh();
+        $this->assertEquals(OrderStatusEnum::CANCELLED, $order->order_status);
+        $this->assertEquals('3001', $order->order_meta['payment_failure_code'] ?? null);
+        $this->assertEquals(PaymentStatusEnum::CANCELLED, $order->payment->payment_status);
+        $this->assertNotNull($order->payment->cancelled_at);
+    }
+
     public function test_auth_callback_silently_redirects_on_empty_res_cd(): void
     {
         $this->mockPluginSettings();
