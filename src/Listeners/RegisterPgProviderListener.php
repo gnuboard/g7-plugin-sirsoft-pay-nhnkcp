@@ -50,9 +50,8 @@ class RegisterPgProviderListener implements HookListenerInterface
     {
         $providers[] = [
             'id' => 'nhnkcp',
-            'name' => function_exists('localized_label')
-                ? localized_label(nameKey: 'sirsoft-pay_nhnkcp::provider.name')
-                : ['ko' => 'NHN KCP', 'en' => 'NHN KCP'],
+            'name_key' => 'sirsoft-pay_nhnkcp::provider.name',
+            'name' => localized_label(nameKey: 'sirsoft-pay_nhnkcp::provider.name'),
             'icon' => 'credit-card',
             'supported_methods' => ['card', 'bank_transfer', 'virtual_account', 'mobile'],
         ];
