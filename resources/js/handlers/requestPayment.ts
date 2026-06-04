@@ -66,6 +66,65 @@ const KCP_EASY_PAY_DIRECT: Record<string, Record<string, string>> = {
     nhnkcp_applepay:       { applepay_direct: 'Y' },
 };
 
+function isKcpPaymentFrameClosed(iframe: HTMLIFrameElement): boolean {
+    if (!iframe.isConnected) {
+        return true;
+    }
+
+    const style = window.getComputedStyle(iframe);
+    if (style.display === 'none' || style.visibility === 'hidden') {
+        return true;
+    }
+
+    const rect = iframe.getBoundingClientRect();
+    return rect.width <= 0 || rect.height <= 0;
+}
+
+export function watchKcpPaymentFrameClosure(
+    iframe: HTMLIFrameElement,
+    onClose: () => void,
+): () => void {
+    let stopped = false;
+    let intervalId: number | undefined;
+    let observer: MutationObserver | undefined;
+
+    const stop = () => {
+        stopped = true;
+        if (observer) {
+            observer.disconnect();
+            observer = undefined;
+        }
+        if (intervalId !== undefined) {
+            window.clearInterval(intervalId);
+            intervalId = undefined;
+        }
+    };
+
+    const checkClosed = () => {
+        if (stopped || !isKcpPaymentFrameClosed(iframe)) {
+            return;
+        }
+
+        stop();
+        onClose();
+    };
+
+    const observeTarget = document.body ?? document.documentElement;
+    if (observeTarget && typeof MutationObserver !== 'undefined') {
+        observer = new MutationObserver(checkClosed);
+        observer.observe(observeTarget, {
+            attributes: true,
+            attributeFilter: ['class', 'hidden', 'style'],
+            childList: true,
+            subtree: true,
+        });
+    }
+
+    intervalId = window.setInterval(checkClosed, 300);
+
+    return stop;
+}
+
 /**
  * 모바일 기기 여부 판별 (3단계 fallback)
  *
@@ -333,11 +392,44 @@ async function handlePcPayment(
         document.body.appendChild(iframe);
 
         const iframeWin = iframe.contentWindow as any;
+        let settled = false;
+        let sdkLoadTimer: number | undefined;
+        let stopCloseWatcher: (() => void) | undefined;
 
         const cleanup = () => {
+            stopCloseWatcher?.();
+            stopCloseWatcher = undefined;
+            if (sdkLoadTimer !== undefined) {
+                clearTimeout(sdkLoadTimer);
+                sdkLoadTimer = undefined;
+            }
             iframe.remove();
             overlay.remove();
         };
+
+        const rejectOnce = (error: Error) => {
+            if (settled) {
+                return;
+            }
+
+            settled = true;
+            cleanup();
+            reject(error);
+        };
+
+        const markCompletingPayment = () => {
+            settled = true;
+            stopCloseWatcher?.();
+            stopCloseWatcher = undefined;
+            if (sdkLoadTimer !== undefined) {
+                clearTimeout(sdkLoadTimer);
+                sdkLoadTimer = undefined;
+            }
+        };
+
+        stopCloseWatcher = watchKcpPaymentFrameClosure(iframe, () => {
+            rejectOnce(new KcpCancelledError('kcp-payment-frame-closed'));
+        });
 
         // 결제 완료 콜백 - KCP가 결제 후 호출
         iframeWin.m_Completepayment = function (form: HTMLFormElement) {
@@ -345,6 +437,8 @@ async function handlePcPayment(
             const resMsg  = (form.elements as any)['res_msg']?.value ?? '';
 
             if (resCode === '0000') {
+                markCompletingPayment();
+
                 // GNU5 패턴(GetField): KCP 결과를 order_info에 병합 후 order_info를 POST.
                 // KakaoPay 등 direct 결제에서 KCP가 ordr_idxx 없는 새 폼을 전달하므로
                 // form을 그대로 제출하면 서버 검증 실패(invalid_params).
@@ -374,15 +468,13 @@ async function handlePcPayment(
                 targetForm.submit();
             } else {
                 // 취소 또는 오류
-                cleanup();
                 const isCancelled = resCode === '' || resCode === '7777' || resMsg.includes('취소');
-                reject(isCancelled ? new KcpCancelledError(resMsg) : new Error(`KCP 오류 [${resCode}]: ${resMsg}`));
+                rejectOnce(isCancelled ? new KcpCancelledError(resMsg) : new Error(`KCP 오류 [${resCode}]: ${resMsg}`));
             }
         };
 
         iframeWin.__kcpFail = (err: Error) => {
-            cleanup();
-            reject(err);
+            rejectOnce(err);
         };
 
         // SDK 동기 로드 + KCP_Pay_Execute 호출
@@ -408,11 +500,15 @@ try {
         iframeDoc.close();
 
         // SDK 로드 실패 대비 타임아웃 — 결제창이 열리면(__kcpReady) 즉시 해제됨
-        const sdkLoadTimer = setTimeout(() => {
-            cleanup();
-            reject(new Error('KCP SDK load timeout'));
+        sdkLoadTimer = window.setTimeout(() => {
+            rejectOnce(new Error('KCP SDK load timeout'));
         }, 15000);
 
-        iframeWin.__kcpReady = () => clearTimeout(sdkLoadTimer);
+        iframeWin.__kcpReady = () => {
+            if (sdkLoadTimer !== undefined) {
+                clearTimeout(sdkLoadTimer);
+                sdkLoadTimer = undefined;
+            }
+        };
     });
 }
