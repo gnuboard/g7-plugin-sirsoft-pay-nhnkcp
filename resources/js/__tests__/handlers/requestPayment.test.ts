@@ -7,7 +7,10 @@
  * "초기 가드 + catch 블록 정상 호출" 두 축에 집중합니다.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { requestPaymentHandler } from '../../handlers/requestPayment';
+import {
+    requestPaymentHandler,
+    watchKcpPaymentFrameClosure,
+} from '../../handlers/requestPayment';
 
 const PG_PAYMENT = {
     order_number: 'ORD-001',
@@ -32,7 +35,9 @@ describe('requestPaymentHandler', () => {
 
     afterEach(() => {
         delete (window as Record<string, unknown>).G7Core;
+        vi.useRealTimers();
         vi.restoreAllMocks();
+        document.body.innerHTML = '';
     });
 
     it('pgPaymentData가 없으면 console.error 후 조기 반환', async () => {
@@ -91,5 +96,51 @@ describe('requestPaymentHandler', () => {
                 paymentMethod: 'vbank',
             })
         );
+    });
+
+    it('KCP 결제 iframe 이 제거되면 닫힘 콜백을 한 번만 실행', async () => {
+        vi.useFakeTimers();
+
+        const iframe = document.createElement('iframe');
+        Object.defineProperty(iframe, 'getBoundingClientRect', {
+            value: () => ({ width: 100, height: 100 }),
+        });
+        document.body.appendChild(iframe);
+
+        const onClose = vi.fn();
+        const stop = watchKcpPaymentFrameClosure(iframe, onClose);
+
+        iframe.remove();
+        await vi.runOnlyPendingTimersAsync();
+
+        expect(onClose).toHaveBeenCalledTimes(1);
+
+        document.body.appendChild(iframe);
+        iframe.remove();
+        await vi.runOnlyPendingTimersAsync();
+
+        expect(onClose).toHaveBeenCalledTimes(1);
+        stop();
+        vi.useRealTimers();
+    });
+
+    it('KCP 결제 iframe 감시를 중지하면 제거되어도 닫힘 콜백을 실행하지 않음', async () => {
+        vi.useFakeTimers();
+
+        const iframe = document.createElement('iframe');
+        Object.defineProperty(iframe, 'getBoundingClientRect', {
+            value: () => ({ width: 100, height: 100 }),
+        });
+        document.body.appendChild(iframe);
+
+        const onClose = vi.fn();
+        const stop = watchKcpPaymentFrameClosure(iframe, onClose);
+
+        stop();
+        iframe.remove();
+        await vi.runOnlyPendingTimersAsync();
+
+        expect(onClose).not.toHaveBeenCalled();
+        vi.useRealTimers();
     });
 });
