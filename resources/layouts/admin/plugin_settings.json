@@ -666,7 +666,7 @@
                                                         "type": "basic",
                                                         "name": "P",
                                                         "props": {
-                                                            "className": "mt-1.5 text-xs text-gray-500 dark:text-gray-400"
+                                                            "className": "mt-1.5 text-tertiary"
                                                         },
                                                         "text": "$t:sirsoft-pay_nhnkcp.settings.live_site_cd_example"
                                                     }
@@ -1239,7 +1239,7 @@
                                                                 "type": "basic",
                                                                 "name": "Span",
                                                                 "props": {
-                                                                    "className": "text-sm text-gray-500 dark:text-gray-400"
+                                                                    "className": "text-label-subtle"
                                                                 },
                                                                 "text": "$t:sirsoft-pay_nhnkcp.settings.vbank_expire_days_unit"
                                                             }
@@ -1306,7 +1306,7 @@
                                         "type": "basic",
                                         "name": "P",
                                         "props": {
-                                            "className": "text-sm text-gray-600 dark:text-gray-400 mb-3"
+                                            "className": "text-label mb-3"
                                         },
                                         "text": "$t:sirsoft-pay_nhnkcp.settings.vbank_notify_hint"
                                     },
@@ -1412,7 +1412,7 @@
                                     {
                                         "type": "basic",
                                         "name": "P",
-                                        "props": { "className": "mt-1 text-sm text-gray-500 dark:text-gray-400" },
+                                        "props": { "className": "mt-1 text-label-subtle" },
                                         "text": "$t:sirsoft-pay_nhnkcp.settings.section_escrow_hint"
                                     }
                                 ]
@@ -1544,7 +1544,7 @@
                                     {
                                         "type": "basic",
                                         "name": "P",
-                                        "props": { "className": "text-sm text-gray-600 dark:text-gray-400 mb-3" },
+                                        "props": { "className": "text-label mb-3" },
                                         "text": "$t:sirsoft-pay_nhnkcp.settings.escrow_common_notify_hint"
                                     },
                                     {
