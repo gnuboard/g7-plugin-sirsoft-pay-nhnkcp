@@ -1,4 +1,16 @@
 {
+    "editor": {
+        "data_source": {
+            "health": "Health",
+            "kcp_escrow_delivery": "Escrow Delivery",
+            "kcp_status": "Payment Status",
+            "nhnkcp_easy_pay_config": "Easy Pay Config",
+            "nhnkcp_test_map": "Test Payment Map",
+            "nicepay_test_map": "Test Payment Map",
+            "settings": "Payment Settings",
+            "vbank_info": "Virtual Account Info"
+        }
+    },
     "messages": {
         "refund": {
             "missing_tid": "Cannot process refund: transaction number (tno) is missing.",

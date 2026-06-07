@@ -4,6 +4,7 @@
     "data_sources": [
         {
             "id": "nhnkcp_test_map",
+            "label_key": "$t:sirsoft-pay_nhnkcp.editor.data_source.nhnkcp_test_map",
             "type": "api",
             "endpoint": "/api/plugins/sirsoft-pay_nhnkcp/admin/orders/test-mode-map",
             "method": "GET",
@@ -13,6 +14,7 @@
         },
         {
             "id": "nicepay_test_map",
+            "label_key": "$t:sirsoft-pay_nhnkcp.editor.data_source.nicepay_test_map",
             "type": "api",
             "endpoint": "/api/plugins/sirsoft-pay_nicepayments/admin/orders/test-mode-map",
             "method": "GET",
