@@ -4,13 +4,6 @@
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를 따르며,
 [Semantic Versioning](https://semver.org/lang/ko/)을 준수합니다.
 
-## [Unreleased]
-
-### Fixed
-
-- NHN KCP PC 결제창을 사용자가 닫거나 취소 콜백이 들어온 경우 임시 주문이 `pending_order` / `ready` 상태로 남지 않고 결제실패/취소 상태로 기록되도록 보강했습니다.
-- KCP PC 결제창 내부 취소 버튼이 외부 iframe을 제거하는 흐름에서도 `close-report`가 호출되도록 감시 로직을 추가했습니다.
-
 ## [1.0.0-beta.3] - 2026-05-20
 
 ### Changed
@@ -21,6 +14,8 @@
 ### Fixed
 
 - 결제창 종료 등으로 KCP 콜백의 `res_cd` 가 빈 값으로 들어온 경우 validation 오류가 아닌 사용자 취소 흐름으로 조용히 복귀하도록 수정했습니다.
+- NHN KCP PC 결제창을 사용자가 닫거나 취소 콜백이 들어온 경우 임시 주문이 결제대기 상태로 남지 않고 결제실패/취소 상태로 기록되도록 보강했습니다.
+- KCP PC 결제창 내부 취소 버튼으로 결제창이 닫히는 흐름에서도 취소 처리가 정상 동작하도록 보강했습니다.
 
 ### Security
 
