@@ -82,7 +82,7 @@
                                 {
                                     "type": "basic",
                                     "name": "Span",
-                                    "props": { "className": "text-xs text-gray-400 dark:text-gray-500 hidden sm:inline" },
+                                    "props": { "className": "text-hint hidden sm:inline" },
                                     "text": "$t:sirsoft-pay_nhnkcp.admin.order_info_description"
                                 },
                                 {
@@ -203,7 +203,7 @@
                                 {
                                     "type": "basic",
                                     "name": "Span",
-                                    "props": { "className": "text-xs text-gray-400 dark:text-gray-500 hidden sm:inline" },
+                                    "props": { "className": "text-hint hidden sm:inline" },
                                     "text": "$t:sirsoft-pay_nhnkcp.admin.escrow_delivery_description"
                                 }
                             ]
