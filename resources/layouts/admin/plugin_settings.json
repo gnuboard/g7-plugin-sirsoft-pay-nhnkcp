@@ -86,7 +86,7 @@
                                     {
                                         "type": "basic",
                                         "name": "Div",
-                                        "props": { "className": "flex items-center gap-3" },
+                                        "props": { "className": "flex-center gap-3" },
                                         "children": [
                                             {
                                                 "type": "basic",
@@ -197,7 +197,7 @@
                                             {
                                                 "type": "basic",
                                                 "name": "P",
-                                                "props": { "className": "text-xs text-gray-600 dark:text-gray-400 mt-1 ml-6" },
+                                                "props": { "className": "text-secondary text-xs mt-1 ml-6" },
                                                 "text": "CLI 바이너리 필요"
                                             }
                                         ]
@@ -242,7 +242,7 @@
                                             {
                                                 "type": "basic",
                                                 "name": "P",
-                                                "props": { "className": "text-xs text-gray-600 dark:text-gray-400 mt-1 ml-6" },
+                                                "props": { "className": "text-secondary text-xs mt-1 ml-6" },
                                                 "text": "SmartPhone Pay (SOAP) + CLI 바이너리 모두 필요"
                                             }
                                         ]
@@ -287,7 +287,7 @@
                                             {
                                                 "type": "basic",
                                                 "name": "P",
-                                                "props": { "className": "text-xs text-gray-600 dark:text-gray-400 mt-1 ml-6" },
+                                                "props": { "className": "text-secondary text-xs mt-1 ml-6" },
                                                 "text": "SmartPhone Pay (SOAP) 만 필요 (평문 콜백)"
                                             }
                                         ]
@@ -358,7 +358,7 @@
                                                             {
                                                                 "type": "basic",
                                                                 "name": "P",
-                                                                "props": { "className": "text-xs text-gray-600 dark:text-gray-400 mt-1" },
+                                                                "props": { "className": "text-secondary text-xs mt-1" },
                                                                 "text": "{{check.detail}}"
                                                             },
                                                             {
@@ -1331,7 +1331,7 @@
                                                 "type": "basic",
                                                 "name": "Button",
                                                 "props": {
-                                                    "className": "flex items-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-body border border-gray-300 dark:border-gray-600 rounded-lg font-medium transition-colors whitespace-nowrap"
+                                                    "className": "flex-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-body border border-gray-300 dark:border-gray-600 rounded-lg font-medium transition-colors whitespace-nowrap"
                                                 },
                                                 "actions": [
                                                     {
@@ -1399,7 +1399,7 @@
                                             {
                                                 "type": "basic",
                                                 "name": "Icon",
-                                                "props": { "name": "shield-check", "className": "w-4 h-4 text-gray-600 dark:text-gray-400" }
+                                                "props": { "name": "shield-check", "className": "text-secondary w-4 h-4" }
                                             },
                                             {
                                                 "type": "basic",
@@ -1566,7 +1566,7 @@
                                                 "type": "basic",
                                                 "name": "Button",
                                                 "props": {
-                                                    "className": "flex items-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-body border border-gray-300 dark:border-gray-600 rounded-lg font-medium transition-colors whitespace-nowrap"
+                                                    "className": "flex-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-body border border-gray-300 dark:border-gray-600 rounded-lg font-medium transition-colors whitespace-nowrap"
                                                 },
                                                 "actions": [
                                                     {

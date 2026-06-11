@@ -363,7 +363,7 @@
                                             "name": "Button",
                                             "props": {
                                                 "disabled": "{{_local._ked_registering}}",
-                                                "className": "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                "className": "flex-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                             },
                                             "actions": [
                                                 {
