@@ -29,7 +29,7 @@
                     "type": "basic",
                     "name": "Div",
                     "if": "{{kcp_status.data?._is_test_mode === true}}",
-                    "props": { "className": "mx-6 mb-3 px-3 py-2 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg flex items-center gap-2" },
+                    "props": { "className": "mx-6 mb-3 px-3 py-2 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg flex-center gap-2" },
                     "children": [
                         {
                             "type": "basic",
@@ -66,7 +66,7 @@
                         {
                             "type": "basic",
                             "name": "Div",
-                            "props": { "className": "flex items-center gap-2 mb-4" },
+                            "props": { "className": "flex-center gap-2 mb-4" },
                             "children": [
                                 {
                                     "type": "basic",
@@ -187,7 +187,7 @@
                         {
                             "type": "basic",
                             "name": "Div",
-                            "props": { "className": "flex items-center gap-2 mb-4" },
+                            "props": { "className": "flex-center gap-2 mb-4" },
                             "children": [
                                 {
                                     "type": "basic",
@@ -217,7 +217,7 @@
                                 {
                                     "type": "basic",
                                     "name": "Div",
-                                    "props": { "className": "flex items-center gap-2 mb-2" },
+                                    "props": { "className": "flex-center gap-2 mb-2" },
                                     "children": [
                                         {
                                             "type": "basic",
@@ -285,7 +285,7 @@
                                 {
                                     "type": "basic",
                                     "name": "Div",
-                                    "props": { "className": "flex items-center gap-2" },
+                                    "props": { "className": "flex-center gap-2" },
                                     "children": [
                                         {
                                             "type": "basic",
@@ -314,7 +314,7 @@
                                 {
                                     "type": "basic",
                                     "name": "Div",
-                                    "props": { "className": "flex items-center gap-2" },
+                                    "props": { "className": "flex-center gap-2" },
                                     "children": [
                                         {
                                             "type": "basic",
