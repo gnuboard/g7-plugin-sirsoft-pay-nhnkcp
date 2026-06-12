@@ -188,7 +188,7 @@
                                                         "type": "basic",
                                                         "name": "Span",
                                                         "props": {
-                                                            "className": "{{health.data.summary.pc_payment_ready ? 'text-xs text-green-700 dark:text-green-300' : 'text-xs text-red-700 dark:text-red-300'}}"
+                                                            "className": "{{health.data.summary.pc_payment_ready ? 'text-success-soft' : 'text-danger-soft'}}"
                                                         },
                                                         "text": "{{health.data.summary.pc_payment_ready ? '동작 가능' : '동작 불가'}}"
                                                     }
@@ -233,7 +233,7 @@
                                                         "type": "basic",
                                                         "name": "Span",
                                                         "props": {
-                                                            "className": "{{health.data.summary.mobile_payment_ready ? 'text-xs text-green-700 dark:text-green-300' : 'text-xs text-red-700 dark:text-red-300'}}"
+                                                            "className": "{{health.data.summary.mobile_payment_ready ? 'text-success-soft' : 'text-danger-soft'}}"
                                                         },
                                                         "text": "{{health.data.summary.mobile_payment_ready ? '동작 가능' : '동작 불가'}}"
                                                     }
@@ -278,7 +278,7 @@
                                                         "type": "basic",
                                                         "name": "Span",
                                                         "props": {
-                                                            "className": "{{health.data.summary.mobile_vbank_only_ready ? 'text-xs text-green-700 dark:text-green-300' : 'text-xs text-red-700 dark:text-red-300'}}"
+                                                            "className": "{{health.data.summary.mobile_vbank_only_ready ? 'text-success-soft' : 'text-danger-soft'}}"
                                                         },
                                                         "text": "{{health.data.summary.mobile_vbank_only_ready ? '동작 가능' : '동작 불가'}}"
                                                     }
@@ -545,7 +545,7 @@
                                                 "type": "basic",
                                                 "name": "H3",
                                                 "props": {
-                                                    "className": "text-sm font-semibold text-amber-800 dark:text-amber-200"
+                                                    "className": "text-sm font-semiboldtext-warning-soft"
                                                 },
                                                 "text": "$t:sirsoft-pay_nhnkcp.settings.live_mode_warning_title"
                                             },
@@ -553,7 +553,7 @@
                                                 "type": "basic",
                                                 "name": "P",
                                                 "props": {
-                                                    "className": "mt-1 text-sm text-amber-700 dark:text-amber-300"
+                                                    "className": "mt-1 text-warning-soft"
                                                 },
                                                 "text": "$t:sirsoft-pay_nhnkcp.settings.live_mode_warning_body"
                                             }
