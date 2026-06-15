@@ -3,6 +3,7 @@
     "data_sources": [
         {
             "id": "kcp_status",
+            "label_key": "$t:sirsoft-pay_nhnkcp.editor.data_source.kcp_status",
             "type": "api",
             "endpoint": "/api/plugins/sirsoft-pay_nhnkcp/admin/orders/{{route.orderNumber}}/transaction-status",
             "method": "GET",
@@ -11,6 +12,7 @@
         },
         {
             "id": "kcp_escrow_delivery",
+            "label_key": "$t:sirsoft-pay_nhnkcp.editor.data_source.kcp_escrow_delivery",
             "type": "api",
             "endpoint": "/api/plugins/sirsoft-pay_nhnkcp/admin/orders/{{route.orderNumber}}/escrow-delivery",
             "method": "GET",
