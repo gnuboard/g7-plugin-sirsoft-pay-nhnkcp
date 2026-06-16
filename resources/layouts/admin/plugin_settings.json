@@ -545,7 +545,7 @@
                                                 "type": "basic",
                                                 "name": "H3",
                                                 "props": {
-                                                    "className": "text-sm font-semiboldtext-warning-soft"
+                                                    "className": "text-sm font-semibold text-warning-soft"
                                                 },
                                                 "text": "$t:sirsoft-pay_nhnkcp.settings.live_mode_warning_title"
                                             },
@@ -840,7 +840,7 @@
                                         "type": "basic",
                                         "name": "Div",
                                         "props": {
-                                            "className": "flex-start gap-3"
+                                            "className": "flex-start justify-between px-6 py-4"
                                         },
                                         "children": [
                                             {
@@ -878,7 +878,7 @@
                                         "type": "basic",
                                         "name": "Div",
                                         "props": {
-                                            "className": "flex-start gap-3"
+                                            "className": "flex-start justify-between px-6 py-4"
                                         },
                                         "children": [
                                             {
@@ -916,7 +916,7 @@
                                         "type": "basic",
                                         "name": "Div",
                                         "props": {
-                                            "className": "flex-start gap-3"
+                                            "className": "flex-start justify-between px-6 py-4"
                                         },
                                         "children": [
                                             {
@@ -954,7 +954,7 @@
                                         "type": "basic",
                                         "name": "Div",
                                         "props": {
-                                            "className": "flex-start gap-3"
+                                            "className": "flex-start justify-between px-6 py-4"
                                         },
                                         "children": [
                                             {
