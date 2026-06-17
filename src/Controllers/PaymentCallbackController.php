@@ -230,10 +230,12 @@ class PaymentCallbackController
                 return redirect($this->resolveSuccessUrl($ordrIdxx));
             }
 
-            // KCP는 CLI 응답에 good_mny가 없는 경우가 많으므로 주문 금액으로 검증
+            // KCP는 CLI 응답에 good_mny가 없는 경우가 많으므로 주문 금액으로 검증.
+            // 결제 청구액 SSoT = total_due_amount (마일리지/예치금 차감 후 실청구액) — 클라이언트
+            // 결제 요청액(buildPgPaymentData)·코어 최종 승인 검증과 동일 기준.
             $approvedAmt = $goodMny > 0
                 ? $goodMny
-                : (int) round((float) $order->total_amount, 2);
+                : (int) round((float) $order->total_due_amount, 2);
 
             // PG 측 승인이 확정된 시점 — 후속 처리 실패 시 cancel 필요. catch 에서 참조.
             $approvedTno = $tno;
