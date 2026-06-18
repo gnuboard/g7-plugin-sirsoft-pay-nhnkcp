@@ -397,7 +397,7 @@
                         "name": "Div",
                         "if": "{{_local.errors}}",
                         "props": {
-                            "className": "alert-danger p-4 mt-6"
+                            "className": "alert-danger"
                         },
                         "children": [
                             {
