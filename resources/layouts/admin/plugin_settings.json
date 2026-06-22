@@ -50,7 +50,7 @@
                 "dataKey": "form",
                 "trackChanges": true,
                 "props": {
-                    "className": "admin-page-content-responsive"
+                    "className": "p-4 sm:p-6 lg:p-8 min-h-screen bg-gray-50 dark:bg-gray-900"
                 },
                 "children": [
                     {
@@ -71,7 +71,7 @@
                         "name": "Div",
                         "if": "{{health.data}}",
                         "props": {
-                            "className": "mt-6 rounded-lg border bg-white dark:bg-gray-800 dark:border-gray-700"
+                            "className": "mt-6 rounded-lg bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700"
                         },
                         "children": [
                             {
@@ -79,7 +79,7 @@
                                 "type": "basic",
                                 "name": "Div",
                                 "props": {
-                                    "className": "flex-between p-4 border-b dark:border-gray-700"
+                                    "className": "flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700"
                                 },
                                 "children": [
                                     {
@@ -155,7 +155,7 @@
                                 "comment": "PC/모바일 카드/모바일 가상계좌 결제 가능 여부 요약 배지",
                                 "type": "basic",
                                 "name": "Div",
-                                "props": { "className": "grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 border-b dark:border-gray-700" },
+                                "props": { "className": "grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 border-b border-gray-200 dark:border-gray-700" },
                                 "children": [
                                     {
                                         "type": "basic",
@@ -474,7 +474,7 @@
                                         "type": "basic",
                                         "name": "Div",
                                         "props": {
-                                            "className": "flex-between"
+                                            "className": "flex items-center justify-between"
                                         },
                                         "children": [
                                             {
@@ -777,7 +777,7 @@
                                         "type": "basic",
                                         "name": "Div",
                                         "props": {
-                                            "className": "flex-between px-6 py-4 bg-blue-50 dark:bg-blue-900/20"
+                                            "className": "flex items-center justify-between px-6 py-4 bg-blue-50 dark:bg-blue-900/20"
                                         },
                                         "children": [
                                             {
@@ -815,7 +815,7 @@
                                         "type": "basic",
                                         "name": "Div",
                                         "props": {
-                                            "className": "flex-between px-6 py-4"
+                                            "className": "flex items-center justify-between px-6 py-4"
                                         },
                                         "children": [
                                             {
@@ -1424,7 +1424,7 @@
                                     {
                                         "type": "basic",
                                         "name": "Div",
-                                        "props": { "className": "flex-between" },
+                                        "props": { "className": "flex items-center justify-between" },
                                         "children": [
                                             {
                                                 "type": "basic",
@@ -1612,7 +1612,7 @@
                         "type": "basic",
                         "name": "Div",
                         "props": {
-                            "className": "sticky-footer-buttons"
+                            "className": "sticky bottom-0 z-10 flex justify-end items-center gap-3 mt-6 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg dark:bg-gray-800 dark:border-gray-700"
                         },
                         "children": [
                             {
