@@ -11,6 +11,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Modules\Sirsoft\Ecommerce\Exceptions\PaymentAmountMismatchException;
 use Carbon\Carbon;
+use Modules\Sirsoft\Ecommerce\Enums\OrderStatusEnum;
 use Modules\Sirsoft\Ecommerce\Helpers\DeviceDetector;
 use Modules\Sirsoft\Ecommerce\Models\Order;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
@@ -175,6 +176,7 @@ class PaymentCallbackController
         // Approve 성공 후 후속 처리 실패 시 PG 측 자동 cancel 을 위한 추적 변수.
         // catch 블록에서 tno 가 set 되어 있으면 KCP 측 승인이 이미 발생한 상태이므로
         // cancelPayment 를 호출해 PG 잔존 승인을 해제한다 (사용자 환불 보장).
+        $order = null;
         $approvedTno = null;
         $approvedAmtForCancel = 0;
 
@@ -186,6 +188,20 @@ class PaymentCallbackController
                 Log::error('KCP: order not found', ['ordr_idxx' => $ordrIdxx]);
 
                 return redirect($this->resolveFailUrl(['error' => 'order_not_found', 'orderId' => $ordrIdxx]));
+            }
+
+            if ($order->order_status === OrderStatusEnum::CANCELLED) {
+                $restored = $this->restoreRetryableKcpOrder($order, $goodMny > 0 ? $goodMny : null);
+                if (! $restored) {
+                    Log::warning('KCP: cancelled order is not retryable', ['ordr_idxx' => $ordrIdxx]);
+
+                    return redirect($this->resolveFailUrl([
+                        'error' => 'order_not_retryable',
+                        'orderId' => $ordrIdxx,
+                    ]));
+                }
+
+                $order = $order->fresh('payment') ?? $order;
             }
 
             // 가상계좌: 계좌 발급 완료 처리 (실제 입금은 vbankNotify에서 처리)
@@ -212,7 +228,13 @@ class PaymentCallbackController
                     'res_msg' => $pgResponse['res_msg'] ?? '',
                 ]);
 
-                $this->orderService->failPayment($order, $pgResCd, $pgResponse['res_msg'] ?? '');
+                $failedOrder = $this->orderService->failPayment($order, $pgResCd, $pgResponse['res_msg'] ?? '');
+                $this->markKcpPaymentFailureRecord(
+                    $failedOrder,
+                    $pgResCd,
+                    $pgResponse['res_msg'] ?? '',
+                    'approval_failed',
+                );
 
                 return redirect($this->resolveFailUrl([
                     'error' => $pgResCd,
@@ -288,6 +310,16 @@ class PaymentCallbackController
             // Approve 가 이미 KCP 측에서 발생했으면 자동 취소로 PG 잔존 승인 해제
             $this->autoCancelIfApproved($approvedTno, $ordrIdxx, $approvedAmtForCancel, 'amount_mismatch');
 
+            if ($order instanceof Order) {
+                $failedOrder = $this->orderService->failPayment($order, 'AMOUNT_MISMATCH', $e->getMessage());
+                $this->markKcpPaymentFailureRecord(
+                    $failedOrder,
+                    'AMOUNT_MISMATCH',
+                    $e->getMessage(),
+                    'amount_mismatch',
+                );
+            }
+
             return redirect($this->resolveFailUrl(['error' => 'amount_mismatch', 'orderId' => $ordrIdxx]));
 
         } catch (\Exception $e) {
@@ -297,6 +329,16 @@ class PaymentCallbackController
             ]);
 
             $this->autoCancelIfApproved($approvedTno, $ordrIdxx, $approvedAmtForCancel, 'confirm_failed');
+
+            if ($order instanceof Order) {
+                $failedOrder = $this->orderService->failPayment($order, 'CONFIRM_FAILED', $e->getMessage());
+                $this->markKcpPaymentFailureRecord(
+                    $failedOrder,
+                    'CONFIRM_FAILED',
+                    $e->getMessage(),
+                    'confirm_failed',
+                );
+            }
 
             return redirect($this->resolveFailUrl([
                 'error' => 'confirm_failed',
@@ -459,7 +501,13 @@ class PaymentCallbackController
                     'error' => $e->getMessage(),
                 ]);
 
-                $this->orderService->failPayment($order, 'cli_exception', $e->getMessage());
+                $failedOrder = $this->orderService->failPayment($order, 'cli_exception', $e->getMessage());
+                $this->markKcpPaymentFailureRecord(
+                    $failedOrder,
+                    'cli_exception',
+                    $e->getMessage(),
+                    'vbank_cli_exception',
+                );
 
                 return redirect($this->resolveFailUrl([
                     'error' => 'cli_exception',
@@ -498,7 +546,13 @@ class PaymentCallbackController
                 'is_mobile' => $isMobile,
             ]);
 
-            $this->orderService->failPayment($order, $effectiveCode, $effectiveMsg);
+            $failedOrder = $this->orderService->failPayment($order, $effectiveCode, $effectiveMsg);
+            $this->markKcpPaymentFailureRecord(
+                $failedOrder,
+                $effectiveCode,
+                $effectiveMsg,
+                'vbank_issuance_failed',
+            );
 
             return redirect($this->resolveFailUrl([
                 'error' => $effectiveCode,
@@ -566,7 +620,13 @@ class PaymentCallbackController
                 'error' => $e->getMessage(),
             ]);
 
-            $this->orderService->failPayment($order, 'vbank_save_failed', $e->getMessage());
+            $failedOrder = $this->orderService->failPayment($order, 'vbank_save_failed', $e->getMessage());
+            $this->markKcpPaymentFailureRecord(
+                $failedOrder,
+                'vbank_save_failed',
+                $e->getMessage(),
+                'vbank_save_failed',
+            );
 
             return redirect($this->resolveFailUrl([
                 'error' => 'vbank_save_failed',

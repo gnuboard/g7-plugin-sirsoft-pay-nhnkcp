@@ -7,6 +7,7 @@ use Plugins\Sirsoft\PayNhnkcp\Controllers\AdminTransactionController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\HealthCheckController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\MobileApprovalController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\PaymentCloseReportController;
+use Plugins\Sirsoft\PayNhnkcp\Controllers\PaymentRetryController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\UserReceiptController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\UserVbankMockDepositController;
 
@@ -23,6 +24,10 @@ use Plugins\Sirsoft\PayNhnkcp\Controllers\UserVbankMockDepositController;
 // PC 결제창 닫힘 보고 — 주문 컨텍스트 검증 후 결제 실패/취소 이력 기록
 Route::post('/payment/close-report', [PaymentCloseReportController::class, 'store'])
     ->name('payment.close-report');
+
+// 결제 재시도 준비 — 이전 실패/취소 주문을 검증 후 같은 주문번호로 재결제 가능 상태로 복구
+Route::post('/payment/retry', [PaymentRetryController::class, 'store'])
+    ->name('payment.retry');
 
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/user/orders/{orderNumber}/receipt', [UserReceiptController::class, 'show'])
