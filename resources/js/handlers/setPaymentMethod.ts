@@ -1,5 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import {
+    applePayUnsupportedMessage,
+    isIosMobileDevice,
+    isNhnKcpApplePayMethod,
+} from '../support/applePayDevice';
+
 const METHOD_TO_TEXT: Record<string, string> = {
     nhnkcp_payco:          'PAYCO',
     nhnkcp_naverpay:       '네이버페이',
@@ -44,8 +50,20 @@ export function setPaymentMethodHandler(action: any): void {
     const paymentMethod = action.params?.paymentMethod;
     if (!paymentMethod) return;
 
+    const G7Core = (window as any).G7Core;
+    if (isNhnKcpApplePayMethod(paymentMethod) && !isIosMobileDevice()) {
+        const message = applePayUnsupportedMessage();
+        G7Core?.state?.setLocal?.({
+            paymentErrorMessage: message,
+            isSubmittingOrder: false,
+        });
+        G7Core?.modal?.open?.('nhnkcp_payment_error_modal');
+        clearEasyPayButtonStyles();
+        return;
+    }
+
     const isEasyPay = typeof paymentMethod === 'string' && paymentMethod.startsWith('nhnkcp_');
-    (window as any).G7Core?.state?.setLocal?.({
+    G7Core?.state?.setLocal?.({
         paymentMethod,
         serverPaymentMethod: isEasyPay ? 'card' : paymentMethod,
     });
