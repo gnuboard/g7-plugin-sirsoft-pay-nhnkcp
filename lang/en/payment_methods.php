@@ -2,23 +2,23 @@
 
 return [
     'payco' => [
-        'name' => 'PAYCO (NHN KCP)',
-        'description' => 'Pay with PAYCO',
+        'name' => 'PAYCO',
+        'description' => 'Pay with PAYCO (NHN KCP)',
     ],
     'naverpay' => [
-        'name' => 'Naver Pay (NHN KCP)',
-        'description' => 'Pay with Naver Pay',
+        'name' => 'Naver Pay (Card)',
+        'description' => 'Pay by Naver Pay credit card (NHN KCP)',
     ],
     'naverpay_point' => [
-        'name' => 'Naver Pay Point (NHN KCP)',
-        'description' => 'Pay with Naver Pay points',
+        'name' => 'Naver Pay (Point)',
+        'description' => 'Pay with Naver Pay Money/Points (NHN KCP)',
     ],
     'kakaopay' => [
-        'name' => 'Kakao Pay (NHN KCP)',
-        'description' => 'Pay with Kakao Pay',
+        'name' => 'Kakao Pay',
+        'description' => 'Pay with Kakao Pay (NHN KCP)',
     ],
     'applepay' => [
-        'name' => 'Apple Pay (NHN KCP)',
-        'description' => 'Pay with Apple Pay',
+        'name' => 'Apple Pay',
+        'description' => 'Pay with Apple Pay (NHN KCP) · Apple Pay is available only for mobile payments on iOS devices.',
     ],
 ];

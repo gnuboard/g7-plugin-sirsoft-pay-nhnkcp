@@ -19,6 +19,11 @@
  */
 
 import { requestPaymentHandler } from './handlers/requestPayment';
+import {
+    applePayUnsupportedMessage,
+    isIosMobileDevice,
+    isNhnKcpApplePayMethod,
+} from './support/applePayDevice';
 
 const ORDER_CREATE_PATH = '/api/modules/sirsoft-ecommerce/user/orders';
 const TARGET_PG_PROVIDER = 'sirsoft-nhnkcp';
@@ -77,6 +82,23 @@ function mutateResponse(originalResponse: Response, mutatedBody: OrderCreateResp
         status: originalResponse.status,
         statusText: originalResponse.statusText,
         headers: originalResponse.headers,
+    });
+}
+
+function buildPaymentMethodBlockedResponse(message: string): Response {
+    return new Response(JSON.stringify({
+        success: false,
+        message,
+        error: message,
+        errors: {
+            payment_method: [message],
+        },
+    }), {
+        status: 422,
+        statusText: 'Unprocessable Content',
+        headers: {
+            'Content-Type': 'application/json',
+        },
     });
 }
 
@@ -158,6 +180,12 @@ export function installOrderResponseInterceptor(): void {
                     logger.info(`easy pay detected from local state: '${localPm}'`);
                 }
             } catch { /* ignore */ }
+        }
+
+        if (isNhnKcpApplePayMethod(originalPaymentMethod) && !isIosMobileDevice()) {
+            const message = applePayUnsupportedMessage();
+            logger.warn(message);
+            return buildPaymentMethodBlockedResponse(message);
         }
 
         // easy pay일 때 browserFetch(원본)를 사용해 KG 이니시스 등 다른 PG 인터셉터 우회
