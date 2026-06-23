@@ -4,6 +4,14 @@
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를 따르며,
 [Semantic Versioning](https://semver.org/lang/ko/)을 준수합니다.
 
+## [1.0.0-beta.5] - 2026-06-23
+
+### Fixed
+
+- 결제창 닫힘, 인증 취소, 승인 실패, 금액 불일치 등 NHN KCP 실패 경로에서 주문 실패 상태와 결제 레코드의 PG별 실패 메타가 함께 기록되도록 보강했습니다.
+- 결제 실패/취소 후 같은 주문번호로 결제창을 다시 열 때 안전한 실패 주문만 `pending_order` / `ready` 상태로 복구하는 재시도 준비 API를 추가했습니다.
+- PC/모바일 결제창 호출 직전에 재시도 준비 API를 호출해 사용자가 결제 실패 후 동일 주문 결제를 다시 시도할 수 있도록 보강했습니다.
+
 ## [1.0.0-beta.4] - 2026-06-03
 
 ### Added

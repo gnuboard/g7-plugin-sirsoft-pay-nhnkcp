@@ -2,6 +2,7 @@
 
 import {
     PaymentCloseReportContext,
+    preparePaymentRetry,
     reportPaymentWindowClosed,
 } from '../paymentCloseReport';
 import {
@@ -210,6 +211,8 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
             payment_method: paymentMethod,
         };
         const callbackUrl = window.location.origin + config.callback_urls.callback;
+
+        await preparePaymentRetry(closeReportContext);
 
         if (isMobileDevice()) {
             await handleMobilePayment(G7Core, pgPaymentData, paymentMethod, isEasyPay, callbackUrl);

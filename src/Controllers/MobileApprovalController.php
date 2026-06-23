@@ -7,6 +7,7 @@ namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
+use Plugins\Sirsoft\PayNhnkcp\Concerns\RecordsPaymentWindowClosure;
 use Plugins\Sirsoft\PayNhnkcp\Exceptions\NhnKcpApiException;
 use Plugins\Sirsoft\PayNhnkcp\Services\KcpSoapService;
 
@@ -18,6 +19,8 @@ use Plugins\Sirsoft\PayNhnkcp\Services\KcpSoapService;
  */
 class MobileApprovalController
 {
+    use RecordsPaymentWindowClosure;
+
     /** 결제수단 → KCP 모바일 pay_method 코드 */
     private const MOBILE_PAY_METHOD_MAP = [
         'card' => 'CARD',
@@ -99,6 +102,17 @@ class MobileApprovalController
         $useEscrow = (bool) ($settings['use_escrow'] ?? false) && ! $isEasyPay;
 
         try {
+            $order = $this->orderService->findByOrderNumber($validated['order_number']);
+            if ($order && ! $order->order_status->isBeforePayment()) {
+                $restored = $this->restoreRetryableKcpOrder($order, (int) $validated['amount']);
+                if (! $restored) {
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'Order is not retryable for NHN KCP payment.',
+                    ], 409);
+                }
+            }
+
             $result = $this->soapService->getApprovalKey(
                 orderNumber: $validated['order_number'],
                 goodName: $validated['good_name'],
