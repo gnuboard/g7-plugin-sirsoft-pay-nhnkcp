@@ -61,7 +61,7 @@
                     "type": "basic",
                     "name": "Div",
                     "if": "{{!!kcp_status.data?.tno}}",
-                    "props": { "className": "card" },
+                    "props": { "className": "admin-card" },
                     "children": [
                         {
                             "type": "basic",
@@ -182,7 +182,7 @@
                     "type": "basic",
                     "name": "Div",
                     "if": "{{kcp_escrow_delivery.data?.has_escrow_payment === true}}",
-                    "props": { "className": "card mt-4" },
+                    "props": { "className": "admin-card mt-4" },
                     "children": [
                         {
                             "type": "basic",
