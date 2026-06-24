@@ -319,6 +319,10 @@ class PaymentCallbackControllerTest extends PluginTestCase
         $this->assertEquals('3001', $order->order_meta['payment_failure_code'] ?? null);
         $this->assertEquals(PaymentStatusEnum::CANCELLED, $order->payment->payment_status);
         $this->assertNotNull($order->payment->cancelled_at);
+        $this->assertSame('nhnkcp', $order->payment->pg_provider);
+        $this->assertSame('nhnkcp', $order->payment->payment_meta['failure_source'] ?? null);
+        $this->assertSame('3001', $order->payment->payment_meta['failure_code'] ?? null);
+        $this->assertSame('window_closed', $order->payment->payment_meta['failure_stage'] ?? null);
     }
 
     public function test_auth_callback_silently_redirects_on_empty_res_cd(): void
@@ -361,6 +365,43 @@ class PaymentCallbackControllerTest extends PluginTestCase
 
         $response->assertRedirect();
         $this->assertStringContainsString('error=9999', $response->headers->get('Location'));
+
+        $order->refresh();
+        $payment = $order->payment;
+        $payment->refresh();
+
+        $this->assertEquals(OrderStatusEnum::CANCELLED, $order->order_status);
+        $this->assertEquals(PaymentStatusEnum::FAILED, $payment->payment_status);
+        $this->assertSame('nhnkcp', $payment->payment_meta['failure_source'] ?? null);
+        $this->assertSame('9999', $payment->payment_meta['failure_code'] ?? null);
+        $this->assertSame('approval_failed', $payment->payment_meta['failure_stage'] ?? null);
+    }
+
+    public function test_auth_callback_records_amount_mismatch_as_non_retryable_kcp_failure(): void
+    {
+        $order = $this->createTestOrder(50000);
+        $this->mockPluginSettings();
+
+        $tno = 'KCP_TNO_AMOUNT_MISMATCH';
+        $this->mockApiService($this->makeCliResponse($tno, $order->order_number, 60000));
+
+        $response = $this->post(
+            '/plugins/sirsoft-pay_nhnkcp/payment/callback',
+            $this->makeCallbackParams($order->order_number, 60000, ['tno' => $tno])
+        );
+
+        $response->assertRedirect();
+        $this->assertStringContainsString('error=amount_mismatch', $response->headers->get('Location'));
+
+        $order->refresh();
+        $payment = $order->payment;
+        $payment->refresh();
+
+        $this->assertEquals(OrderStatusEnum::CANCELLED, $order->order_status);
+        $this->assertEquals(PaymentStatusEnum::FAILED, $payment->payment_status);
+        $this->assertSame('nhnkcp', $payment->payment_meta['failure_source'] ?? null);
+        $this->assertSame('AMOUNT_MISMATCH', $payment->payment_meta['failure_code'] ?? null);
+        $this->assertSame('amount_mismatch', $payment->payment_meta['failure_stage'] ?? null);
     }
 
     public function test_auth_callback_redirects_to_fail_url_on_missing_params(): void
