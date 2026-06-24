@@ -64,6 +64,13 @@ class MobileApprovalControllerTest extends PluginTestCase
         $this->app->instance(KcpSoapService::class, $mock);
     }
 
+    private function expectSoapServiceNotCalled(): void
+    {
+        $mock = $this->createMock(KcpSoapService::class);
+        $mock->expects($this->never())->method('getApprovalKey');
+        $this->app->instance(KcpSoapService::class, $mock);
+    }
+
     private function mockPluginSettings(): void
     {
         $mock = $this->createMock(\App\Services\PluginSettingsService::class);
@@ -182,6 +189,33 @@ class MobileApprovalControllerTest extends PluginTestCase
         $response->assertUnauthorized();
     }
 
+    public function test_get_approval_key_rejects_other_users_order(): void
+    {
+        $order = $this->createOrder(10000);
+        $otherUser = User::factory()->create();
+        $this->expectSoapServiceNotCalled();
+        $this->mockPluginSettings();
+
+        $response = $this->actingAs($otherUser)
+            ->postJson(self::APPROVAL_KEY_ENDPOINT, $this->approvalKeyPayload($order));
+
+        $response->assertForbidden()
+            ->assertJsonPath('success', false);
+    }
+
+    public function test_get_approval_key_rejects_amount_mismatch(): void
+    {
+        $order = $this->createOrder(10000);
+        $this->expectSoapServiceNotCalled();
+        $this->mockPluginSettings();
+
+        $response = $this->actingAs($order->user)
+            ->postJson(self::APPROVAL_KEY_ENDPOINT, $this->approvalKeyPayload($order, ['amount' => 9900]));
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('success', false);
+    }
+
     public function test_get_approval_key_validates_required_fields(): void
     {
         $user = User::factory()->create();
@@ -297,11 +331,10 @@ class MobileApprovalControllerTest extends PluginTestCase
         );
     }
 
-    public function test_tax_fields_absent_when_order_not_found(): void
+    public function test_get_approval_key_rejects_missing_order(): void
     {
-        // 존재하지 않는 order_number로 요청 시 tax 분할 없이 정상 반환
         $order = $this->createOrder(10000);
-        $this->mockSoapService();
+        $this->expectSoapServiceNotCalled();
         $this->mockPluginSettings();
 
         $payload = $this->approvalKeyPayload($order, ['order_number' => 'NON-EXISTENT-ORDER']);
@@ -309,9 +342,7 @@ class MobileApprovalControllerTest extends PluginTestCase
         $response = $this->actingAs($order->user)
             ->postJson(self::APPROVAL_KEY_ENDPOINT, $payload);
 
-        $response->assertOk();
-        $fields = $response->json('data.fields');
-
-        $this->assertArrayNotHasKey('tax_flag', $fields, '주문 미조회 시 tax 필드 미포함');
+        $response->assertNotFound()
+            ->assertJsonPath('success', false);
     }
 }

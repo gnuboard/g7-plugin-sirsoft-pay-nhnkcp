@@ -67,19 +67,12 @@ class NhnKcpApiService
 
     private string $binDir;
 
-    public function __construct(PluginSettingsService $pluginSettingsService)
+    public function __construct(
+        private readonly PluginSettingsService $pluginSettingsService,
+    )
     {
-        $settings = $pluginSettingsService->get(self::PLUGIN_IDENTIFIER) ?? [];
-        $this->isTest = $settings['is_test_mode'] ?? true;
-        $this->siteCd = $this->isTest
-            ? ($settings['test_site_cd'] ?? 'T0000')
-            : $this->buildLiveSiteCd($settings['live_site_cd'] ?? '');
-        $this->escrowSiteCd = $this->isTest
-            ? ($settings['escrow_test_site_cd'] ?? 'T0007')
-            : $this->siteCd;
-        $this->siteKey = $this->isTest
-            ? ($settings['test_site_key'] ?? '')
-            : ($settings['live_site_key'] ?? '');
+        $settings = $this->pluginSettingsService->get(self::PLUGIN_IDENTIFIER) ?? [];
+        $this->applyCredentials($settings, (bool) ($settings['is_test_mode'] ?? true));
         $this->binDir = dirname(__DIR__, 2) . '/bin';
     }
 
@@ -91,6 +84,31 @@ class NhnKcpApiService
     public function getSiteCd(): string
     {
         return $this->siteCd;
+    }
+
+    /**
+     * 현재 서비스 인스턴스가 테스트 모드인지 반환한다.
+     *
+     * @return bool 테스트 모드 여부
+     */
+    public function isTestMode(): bool
+    {
+        return $this->isTest;
+    }
+
+    /**
+     * 결제 당시 저장된 KCP 상점 코드/모드를 환불·조회 호출 전에 복원한다.
+     *
+     * 사이트 키는 DB 결제 메타에 저장하지 않고 현재 플러그인 설정의 해당 모드 키를 사용한다.
+     *
+     * @param  bool  $isTestMode  결제 당시 테스트 모드 여부
+     * @param  string  $siteCd  결제 당시 KCP site_cd
+     * @return void
+     */
+    public function useStoredCredentials(bool $isTestMode, string $siteCd): void
+    {
+        $settings = $this->pluginSettingsService->get(self::PLUGIN_IDENTIFIER) ?? [];
+        $this->applyCredentials($settings, $isTestMode, $siteCd);
     }
 
     /**
@@ -298,12 +316,6 @@ class NhnKcpApiService
             $resData = $this->executeCliLinux($txCd, $ordrIdxx, $encData, $encInfo, $custIp, $paUrl, $modxData, $siteCd);
         }
 
-        Log::debug('KCP CLI response', [
-            'tx_cd' => $txCd,
-            'ordr_idxx' => $ordrIdxx,
-            'res_data' => $resData,
-        ]);
-
         if ($resData === '') {
             $resData = 'res_cd=9502' . chr(31) . 'res_msg=연동 모듈 호출 오류';
         }
@@ -317,6 +329,12 @@ class NhnKcpApiService
         }
 
         parse_str(str_replace(chr(31), '&', $resData), $result);
+
+        Log::debug('KCP CLI response parsed', [
+            'tx_cd' => $txCd,
+            'ordr_idxx' => $ordrIdxx,
+            'res_cd' => $result['res_cd'] ?? null,
+        ]);
 
         return $result;
     }
@@ -373,13 +391,18 @@ class NhnKcpApiService
         // escapeshellarg 로 binPath / args 각각을 안전하게 quoting (Windows 는 `"` 제거 + 큰따옴표 래핑).
         $command = escapeshellarg($binPath) . ' ' . escapeshellarg($args);
 
-        Log::debug('KCP CLI command (Windows)', ['command' => $command]);
+        Log::debug('KCP CLI command prepared (Windows)', [
+            'bin' => basename($binPath),
+            'tx_cd' => $txCd,
+            'ordr_idxx' => $ordrIdxx,
+            'site_cd' => $siteCd,
+        ]);
 
         exec($command, $output, $returnCode);
 
         Log::debug('KCP CLI exec result', [
             'return_code' => $returnCode,
-            'output_lines' => $output,
+            'output_count' => count($output),
         ]);
 
         // Windows 코드페이지 변경 메시지('Active code page: ...') 등 비-KCP 라인 제거
@@ -467,7 +490,9 @@ class NhnKcpApiService
     private function ensureCliExecutable(string $binPath): void
     {
         if (! is_file($binPath)) {
-            throw new NhnKcpApiException("KCP CLI 바이너리 누락: {$binPath}");
+            throw new NhnKcpApiException(__('sirsoft-pay_nhnkcp::messages.errors.cli_binary_missing', [
+                'path' => $binPath,
+            ]));
         }
 
         clearstatcache(true, $binPath);
@@ -497,7 +522,7 @@ class NhnKcpApiService
         ]);
 
         throw new NhnKcpApiException(
-            "KCP CLI 바이너리 실행 권한 부족 — 운영자 조치 필요 (sudo chmod 755 {$binPath})"
+            __('sirsoft-pay_nhnkcp::messages.errors.cli_binary_not_executable', ['path' => $binPath])
         );
     }
 
@@ -562,6 +587,27 @@ class NhnKcpApiService
     private function apiBaseUrl(): string
     {
         return $this->isTest ? self::API_URL_TEST : self::API_URL_LIVE;
+    }
+
+    /**
+     * 플러그인 설정과 선택 모드 기준으로 KCP 인증 정보를 적용한다.
+     */
+    private function applyCredentials(array $settings, bool $isTestMode, string $siteCdOverride = ''): void
+    {
+        $this->isTest = $isTestMode;
+
+        if ($this->isTest) {
+            $this->siteCd = $siteCdOverride !== '' ? $siteCdOverride : ($settings['test_site_cd'] ?? 'T0000');
+            $this->escrowSiteCd = $settings['escrow_test_site_cd'] ?? 'T0007';
+            $this->siteKey = $settings['test_site_key'] ?? '';
+
+            return;
+        }
+
+        $liveSiteCd = $siteCdOverride !== '' ? $siteCdOverride : ($settings['live_site_cd'] ?? '');
+        $this->siteCd = $this->buildLiveSiteCd($liveSiteCd);
+        $this->escrowSiteCd = $this->siteCd;
+        $this->siteKey = $settings['live_site_key'] ?? '';
     }
 
     private function buildLiveSiteCd(string $suffix): string

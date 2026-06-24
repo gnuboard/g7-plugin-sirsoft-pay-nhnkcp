@@ -103,6 +103,22 @@ class NhnKcpApiServiceTest extends PluginTestCase
         $this->assertEquals('SR123456', $service->getSiteCd());
     }
 
+    public function test_use_stored_credentials_restores_payment_time_mode_and_site_cd(): void
+    {
+        $service = $this->makeService([
+            'is_test_mode' => true,
+            'test_site_cd' => 'T0000',
+            'live_site_cd' => 'SR999999',
+            'live_site_key' => 'live_key_value',
+        ]);
+
+        $service->useStoredCredentials(false, 'SR123456');
+
+        $this->assertEquals('SR123456', $service->getSiteCd());
+        $this->assertStringContainsString('pay.kcp.co.kr', $service->getJsUrl());
+        $this->assertStringNotContainsString('testpay', $service->getJsUrl());
+    }
+
     public function test_get_js_url_returns_test_url_in_test_mode(): void
     {
         $service = $this->makeService();
@@ -266,6 +282,17 @@ class NhnKcpApiServiceTest extends PluginTestCase
         } finally {
             $this->removeStubbedCliDirectory($stub['dir']);
         }
+    }
+
+    public function test_cli_debug_logs_do_not_include_raw_response_or_site_key(): void
+    {
+        $source = file_get_contents((new \ReflectionClass(NhnKcpApiService::class))->getFileName());
+        $this->assertIsString($source);
+
+        $this->assertStringNotContainsString("'res_data' =>", $source);
+        $this->assertStringNotContainsString("'output_lines' =>", $source);
+        $this->assertStringNotContainsString("['command' => \$command]", $source);
+        $this->assertStringContainsString("'res_cd' => \$result['res_cd'] ?? null", $source);
     }
 
     public function test_cancel_payment_rejects_unsafe_cancel_message_before_cli_exec(): void
