@@ -3,6 +3,7 @@
     "data_sources": [
         {
             "id": "kcp_status",
+            "label_key": "$t:sirsoft-pay_nhnkcp.editor.data_source.kcp_status",
             "type": "api",
             "endpoint": "/api/plugins/sirsoft-pay_nhnkcp/admin/orders/{{route.orderNumber}}/transaction-status",
             "method": "GET",
@@ -11,6 +12,7 @@
         },
         {
             "id": "kcp_escrow_delivery",
+            "label_key": "$t:sirsoft-pay_nhnkcp.editor.data_source.kcp_escrow_delivery",
             "type": "api",
             "endpoint": "/api/plugins/sirsoft-pay_nhnkcp/admin/orders/{{route.orderNumber}}/escrow-delivery",
             "method": "GET",
@@ -27,7 +29,7 @@
                     "type": "basic",
                     "name": "Div",
                     "if": "{{kcp_status.data?._is_test_mode === true}}",
-                    "props": { "className": "mx-6 mb-3 px-3 py-2 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg flex items-center gap-2" },
+                    "props": { "className": "mx-6 mb-3 px-3 py-2 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg flex-center gap-2" },
                     "children": [
                         {
                             "type": "basic",
@@ -64,7 +66,7 @@
                         {
                             "type": "basic",
                             "name": "Div",
-                            "props": { "className": "flex items-center gap-2 mb-4" },
+                            "props": { "className": "flex-center gap-2 mb-4" },
                             "children": [
                                 {
                                     "type": "basic",
@@ -80,7 +82,7 @@
                                 {
                                     "type": "basic",
                                     "name": "Span",
-                                    "props": { "className": "text-xs text-gray-400 dark:text-gray-500 hidden sm:inline" },
+                                    "props": { "className": "text-hint hidden sm:inline" },
                                     "text": "$t:sirsoft-pay_nhnkcp.admin.order_info_description"
                                 },
                                 {
@@ -185,7 +187,7 @@
                         {
                             "type": "basic",
                             "name": "Div",
-                            "props": { "className": "flex items-center gap-2 mb-4" },
+                            "props": { "className": "flex-center gap-2 mb-4" },
                             "children": [
                                 {
                                     "type": "basic",
@@ -201,7 +203,7 @@
                                 {
                                     "type": "basic",
                                     "name": "Span",
-                                    "props": { "className": "text-xs text-gray-400 dark:text-gray-500 hidden sm:inline" },
+                                    "props": { "className": "text-hint hidden sm:inline" },
                                     "text": "$t:sirsoft-pay_nhnkcp.admin.escrow_delivery_description"
                                 }
                             ]
@@ -215,7 +217,7 @@
                                 {
                                     "type": "basic",
                                     "name": "Div",
-                                    "props": { "className": "flex items-center gap-2 mb-2" },
+                                    "props": { "className": "flex-center gap-2 mb-2" },
                                     "children": [
                                         {
                                             "type": "basic",
@@ -283,12 +285,12 @@
                                 {
                                     "type": "basic",
                                     "name": "Div",
-                                    "props": { "className": "flex items-center gap-2" },
+                                    "props": { "className": "flex-center gap-2" },
                                     "children": [
                                         {
                                             "type": "basic",
                                             "name": "Label",
-                                            "props": { "className": "text-xs text-gray-500 dark:text-gray-400 w-20 flex-shrink-0" },
+                                            "props": { "className": "text-tertiary w-20 flex-shrink-0" },
                                             "text": "$t:sirsoft-pay_nhnkcp.admin.escrow_delivery_invoice_label"
                                         },
                                         {
@@ -312,12 +314,12 @@
                                 {
                                     "type": "basic",
                                     "name": "Div",
-                                    "props": { "className": "flex items-center gap-2" },
+                                    "props": { "className": "flex-center gap-2" },
                                     "children": [
                                         {
                                             "type": "basic",
                                             "name": "Label",
-                                            "props": { "className": "text-xs text-gray-500 dark:text-gray-400 w-20 flex-shrink-0" },
+                                            "props": { "className": "text-tertiary w-20 flex-shrink-0" },
                                             "text": "$t:sirsoft-pay_nhnkcp.admin.escrow_delivery_courier_label"
                                         },
                                         {
@@ -361,7 +363,7 @@
                                             "name": "Button",
                                             "props": {
                                                 "disabled": "{{_local._ked_registering}}",
-                                                "className": "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                "className": "flex-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                             },
                                             "actions": [
                                                 {
