@@ -6,14 +6,16 @@ namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
 
 use App\Extension\HookManager;
 use App\Services\PluginSettingsService;
+use Carbon\Carbon;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
-use Modules\Sirsoft\Ecommerce\Exceptions\PaymentAmountMismatchException;
-use Carbon\Carbon;
 use Modules\Sirsoft\Ecommerce\Enums\OrderStatusEnum;
+use Modules\Sirsoft\Ecommerce\Exceptions\PaymentAmountMismatchException;
 use Modules\Sirsoft\Ecommerce\Helpers\DeviceDetector;
 use Modules\Sirsoft\Ecommerce\Models\Order;
+use Modules\Sirsoft\Ecommerce\Services\CurrencyConversionService;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\PreventsReplayCallback;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\RecordsPaymentWindowClosure;
@@ -120,9 +122,9 @@ class PaymentCallbackController
      * 카드(즉시완료) 분기. 사용자 취소 / 인증 실패 시 에러 query 로 체크아웃 복귀.
      *
      * @param  AuthCallbackRequest  $request  검증된 콜백 페이로드
-     * @return \Illuminate\Http\RedirectResponse 성공/실패 URL 로 리다이렉트
+     * @return RedirectResponse 성공/실패 URL 로 리다이렉트
      */
-    public function authCallback(AuthCallbackRequest $request): \Illuminate\Http\RedirectResponse
+    public function authCallback(AuthCallbackRequest $request): RedirectResponse
     {
         $validated = $request->validated();
 
@@ -138,8 +140,8 @@ class PaymentCallbackController
             'ordr_idxx' => $ordrIdxx,
             'res_cd' => $resCd,
             'good_mny' => $goodMny,
-            'has_enc_data' => !empty($encData),
-            'has_enc_info' => !empty($encInfo),
+            'has_enc_data' => ! empty($encData),
+            'has_enc_info' => ! empty($encInfo),
             'post_keys' => array_keys($request->all()),
         ]);
 
@@ -253,11 +255,12 @@ class PaymentCallbackController
             }
 
             // KCP는 CLI 응답에 good_mny가 없는 경우가 많으므로 주문 금액으로 검증.
-            // 결제 청구액 SSoT = total_due_amount (마일리지/예치금 차감 후 실청구액) — 클라이언트
-            // 결제 요청액(buildPgPaymentData)·코어 최종 승인 검증과 동일 기준.
+            // 결제 청구액 SSoT = 결제 통화(order_currency) 환산액 (마일리지/예치금 차감 후 실청구액) —
+            // 클라이언트 결제 요청액(buildPgPaymentData)·코어 최종 승인 검증과 동일 기준.
+            // base≠결제 통화(예: base JPY, 결제 KRW)에서도 PG 청구 통화와 단위가 일치한다.
             $approvedAmt = $goodMny > 0
                 ? $goodMny
-                : (int) round((float) $order->total_due_amount, 2);
+                : app(CurrencyConversionService::class)->resolveOrderPaymentChargeAmount($order);
 
             // PG 측 승인이 확정된 시점 — 후속 처리 실패 시 cancel 필요. catch 에서 참조.
             $approvedTno = $tno;
@@ -474,7 +477,7 @@ class PaymentCallbackController
         string $ordrIdxx,
         string $custIp,
         Request $request,
-    ): \Illuminate\Http\RedirectResponse {
+    ): RedirectResponse {
         $tno = $validated['tno'] ?? '';
         $pgResponse = [];
         $isMobile = $encData === '' || $encInfo === '';
@@ -483,13 +486,13 @@ class PaymentCallbackController
             // 모바일: 콜백 POST 의 평문 필드를 그대로 응답으로 취급
             // KCP 변종 키 모두 대응 (bankname|bank_name, depositor|account_holder, va_date|vnbank_expire_date)
             $pgResponse = [
-                'res_cd'    => $validated['res_cd'] ?? self::SUCCESS_RES_CD,
-                'res_msg'   => $validated['res_msg'] ?? '',
-                'tno'       => $tno,
-                'bankname'  => $request->input('bankname') ?? $request->input('bank_name'),
-                'account'   => $request->input('account'),
+                'res_cd' => $validated['res_cd'] ?? self::SUCCESS_RES_CD,
+                'res_msg' => $validated['res_msg'] ?? '',
+                'tno' => $tno,
+                'bankname' => $request->input('bankname') ?? $request->input('bank_name'),
+                'account' => $request->input('account'),
                 'depositor' => $request->input('depositor') ?? $request->input('account_holder'),
-                'va_date'   => $request->input('va_date') ?? $request->input('vnbank_expire_date'),
+                'va_date' => $request->input('va_date') ?? $request->input('vnbank_expire_date'),
             ];
         } else {
             // PC: CLI 호출. 호출 자체 실패(권한 누락 / pub.key 부재 등)는 발급 여부 미확정이므로 안전하게 실패 처리.
@@ -564,10 +567,10 @@ class PaymentCallbackController
         if ($isMobile) {
             Log::info('KCP: vbank account issued via mobile callback (no CLI)', [
                 'ordr_idxx' => $ordrIdxx,
-                'tno'       => $tno,
-                'bankname'  => $bankname,
-                'account'   => $account,
-                'va_date'   => $pgResponse['va_date'] ?? null,
+                'tno' => $tno,
+                'bankname' => $bankname,
+                'account' => $account,
+                'va_date' => $pgResponse['va_date'] ?? null,
             ]);
         } else {
             $tno = $pgResponse['tno'] ?? $tno;
@@ -596,14 +599,14 @@ class PaymentCallbackController
             }
 
             $order->payment()->update(array_filter([
-                'transaction_id'  => $tno ?: null,
-                'vbank_name'      => $bankname,
-                'vbank_number'    => $account,
-                'vbank_holder'    => $pgResponse['depositor'] ?? null,
-                'vbank_due_at'    => $vbankDueAt,
+                'transaction_id' => $tno ?: null,
+                'vbank_name' => $bankname,
+                'vbank_number' => $account,
+                'vbank_holder' => $pgResponse['depositor'] ?? null,
+                'vbank_due_at' => $vbankDueAt,
                 'vbank_issued_at' => now(),
-                'payment_device'  => $isMobile ? 'mobile' : 'pc',
-                'payment_meta'    => [
+                'payment_device' => $isMobile ? 'mobile' : 'pc',
+                'payment_meta' => [
                     'result_code' => $pgResponse['res_cd'] ?? null,
                     'tno' => $tno ?: null,
                     'bankname' => $bankname,
@@ -706,24 +709,24 @@ class PaymentCallbackController
                 $tno,
                 $ordrIdxx,
                 $cancelAmt,
-                'auto-cancel: ' . $reason,
+                'auto-cancel: '.$reason,
             );
 
             Log::warning('KCP: auto-cancel after post-approve failure', [
-                'tno'       => $tno,
+                'tno' => $tno,
                 'ordr_idxx' => $ordrIdxx,
-                'amount'    => $cancelAmt,
-                'reason'    => $reason,
-                'res_cd'    => $result['res_cd'] ?? null,
-                'res_msg'   => $result['res_msg'] ?? null,
+                'amount' => $cancelAmt,
+                'reason' => $reason,
+                'res_cd' => $result['res_cd'] ?? null,
+                'res_msg' => $result['res_msg'] ?? null,
             ]);
         } catch (\Throwable $e) {
             Log::error('KCP: auto-cancel FAILED — manual reconciliation required', [
-                'tno'       => $tno,
+                'tno' => $tno,
                 'ordr_idxx' => $ordrIdxx,
-                'amount'    => $cancelAmt,
-                'reason'    => $reason,
-                'error'     => $e->getMessage(),
+                'amount' => $cancelAmt,
+                'reason' => $reason,
+                'error' => $e->getMessage(),
             ]);
         }
     }
@@ -747,7 +750,7 @@ class PaymentCallbackController
         $query = http_build_query(array_filter($queryParams));
         $separator = str_contains($baseUrl, '?') ? '&' : '?';
 
-        return $baseUrl . $separator . $query;
+        return $baseUrl.$separator.$query;
     }
 
     /**
@@ -765,9 +768,9 @@ class PaymentCallbackController
         }
 
         $base = rtrim((string) config('app.url'), '/');
-        $path = $url === '' ? '/' : ($url[0] === '/' ? $url : '/' . $url);
+        $path = $url === '' ? '/' : ($url[0] === '/' ? $url : '/'.$url);
 
-        return $base . $path;
+        return $base.$path;
     }
 
     /**
@@ -784,5 +787,4 @@ class PaymentCallbackController
 
         return $converted !== false ? $converted : $msg;
     }
-
 }
