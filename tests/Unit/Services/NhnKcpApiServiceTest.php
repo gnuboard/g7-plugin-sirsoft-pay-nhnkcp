@@ -5,6 +5,7 @@ namespace Plugins\Sirsoft\PayNhnkcp\Tests\Unit\Services;
 use App\Services\PluginSettingsService;
 use Illuminate\Support\Facades\Http;
 use Plugins\Sirsoft\PayNhnkcp\Exceptions\NhnKcpApiException;
+use Plugins\Sirsoft\PayNhnkcp\Services\KcpSoapService;
 use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
 use Plugins\Sirsoft\PayNhnkcp\Tests\PluginTestCase;
 
@@ -92,6 +93,20 @@ class NhnKcpApiServiceTest extends PluginTestCase
         $this->assertEquals(self::TEST_SITE_CD, $service->getSiteCd());
     }
 
+    public function test_kcp_soap_service_falls_back_to_test_site_cd_when_escrow_test_site_cd_is_empty(): void
+    {
+        $settingsMock = $this->createMock(PluginSettingsService::class);
+        $settingsMock->method('get')->willReturn([
+            'is_test_mode' => true,
+            'test_site_cd' => self::TEST_SITE_CD,
+            'escrow_test_site_cd' => '',
+        ]);
+
+        $service = new KcpSoapService($settingsMock);
+
+        $this->assertSame(self::TEST_SITE_CD, $service->getEscrowSiteCd());
+    }
+
     public function test_get_site_cd_returns_live_site_cd_in_live_mode(): void
     {
         $service = $this->makeService([
@@ -101,6 +116,22 @@ class NhnKcpApiServiceTest extends PluginTestCase
         ]);
 
         $this->assertEquals('SR123456', $service->getSiteCd());
+    }
+
+    public function test_use_stored_credentials_restores_payment_time_mode_and_site_cd(): void
+    {
+        $service = $this->makeService([
+            'is_test_mode' => true,
+            'test_site_cd' => 'T0000',
+            'live_site_cd' => 'SR999999',
+            'live_site_key' => 'live_key_value',
+        ]);
+
+        $service->useStoredCredentials(false, 'SR123456');
+
+        $this->assertEquals('SR123456', $service->getSiteCd());
+        $this->assertStringContainsString('pay.kcp.co.kr', $service->getJsUrl());
+        $this->assertStringNotContainsString('testpay', $service->getJsUrl());
     }
 
     public function test_get_js_url_returns_test_url_in_test_mode(): void
@@ -236,6 +267,25 @@ class NhnKcpApiServiceTest extends PluginTestCase
         }
     }
 
+    public function test_register_escrow_delivery_uses_test_site_cd_when_escrow_test_site_cd_is_empty(): void
+    {
+        $stub = $this->makeServiceWithStubbedCli(
+            'res_cd=0000' . chr(31) . 'res_msg=배송등록완료',
+            ['escrow_test_site_cd' => '']
+        );
+        /** @var NhnKcpApiService $service */
+        $service = $stub['service'];
+
+        try {
+            $service->registerEscrowDelivery('TNO_ESCROW', 'ORD-ESCROW', '1234567890', '04');
+
+            $args = $this->capturedCliArgs($stub['log']);
+            $this->assertStringContainsString('site_cd=' . self::TEST_SITE_CD, $args);
+        } finally {
+            $this->removeStubbedCliDirectory($stub['dir']);
+        }
+    }
+
     public function test_cancel_payment_throws_on_non_0000_res_cd(): void
     {
         $stub = $this->makeServiceWithStubbedCli('res_cd=9999' . chr(31) . 'res_msg=취소 실패');
@@ -266,6 +316,17 @@ class NhnKcpApiServiceTest extends PluginTestCase
         } finally {
             $this->removeStubbedCliDirectory($stub['dir']);
         }
+    }
+
+    public function test_cli_debug_logs_do_not_include_raw_response_or_site_key(): void
+    {
+        $source = file_get_contents((new \ReflectionClass(NhnKcpApiService::class))->getFileName());
+        $this->assertIsString($source);
+
+        $this->assertStringNotContainsString("'res_data' =>", $source);
+        $this->assertStringNotContainsString("'output_lines' =>", $source);
+        $this->assertStringNotContainsString("['command' => \$command]", $source);
+        $this->assertStringContainsString("'res_cd' => \$result['res_cd'] ?? null", $source);
     }
 
     public function test_cancel_payment_rejects_unsafe_cancel_message_before_cli_exec(): void

@@ -156,12 +156,9 @@ class PaymentCallbackController
                 'is_cancelled' => $isCancelled,
             ]);
 
-            $this->markAuthPhaseFailureIfOrderMatches(
-                $ordrIdxx,
-                $goodMny > 0 ? $goodMny : null,
-                $resCd !== '' ? $resCd : 'USER_CANCEL',
-                $resMsg,
-            );
+            // authCallback is a browser-return endpoint without PG-server signature/IP proof.
+            // Do not mutate order state from a non-success browser result alone; the
+            // authenticated close-report path records real window closures.
 
             // 사용자 취소는 오류 없이 체크아웃으로 복귀
             if ($isCancelled) {
@@ -204,6 +201,34 @@ class PaymentCallbackController
                 }
 
                 $order = $order->fresh('payment') ?? $order;
+            }
+
+            $expectedAmount = $this->expectedPaymentPrice($order);
+            if (! $this->isKrwOrder($order)) {
+                Log::warning('KCP: unsupported order currency', [
+                    'ordr_idxx' => $ordrIdxx,
+                    'currency' => $this->orderCurrency($order),
+                ]);
+
+                return redirect($this->resolveFailUrl(['error' => 'currency_not_supported', 'orderId' => $ordrIdxx]));
+            }
+
+            if ($goodMny > 0 && $goodMny !== $expectedAmount) {
+                Log::warning('KCP: browser callback amount mismatch before approval', [
+                    'ordr_idxx' => $ordrIdxx,
+                    'expected' => $expectedAmount,
+                    'actual' => $goodMny,
+                ]);
+
+                $failedOrder = $this->orderService->failPayment($order, 'AMOUNT_MISMATCH', 'KCP callback amount mismatch');
+                $this->markKcpPaymentFailureRecord(
+                    $failedOrder,
+                    'AMOUNT_MISMATCH',
+                    'KCP callback amount mismatch',
+                    'amount_mismatch',
+                );
+
+                return redirect($this->resolveFailUrl(['error' => 'amount_mismatch', 'orderId' => $ordrIdxx]));
             }
 
             // 가상계좌: 계좌 발급 완료 처리 (실제 입금은 vbankNotify에서 처리)
@@ -280,9 +305,9 @@ class PaymentCallbackController
                 'receipt_url' => null,
                 'payment_meta' => [
                     'res_cd' => $pgResCd,
+                    ...$this->currentCredentialMeta(),
                     'use_pay_method' => $validated['use_pay_method'] ?? $pgResponse['use_pay_method'] ?? null,
                     'app_time' => $pgResponse['app_time'] ?? null,
-                    'account' => $pgResponse['account'] ?? null,
                     'bank_name' => $pgResponse['bank_name'] ?? null,
                     'vnbank_expire_date' => $pgResponse['vnbank_expire_date'] ?? null,
                     'escw_yn' => $pgResponse['escw_yn'] ?? null,
@@ -412,6 +437,18 @@ class PaymentCallbackController
                 return $this->kcpNotifyResponse();
             }
 
+            $contextError = $this->validateVbankNotifyContext($order, $validated, $tno, $ipgmMny);
+            if ($contextError !== null) {
+                Log::warning('KCP: vbank notify context mismatch — retry requested', [
+                    'reason' => $contextError,
+                    'tno' => $tno,
+                    'order_no' => $orderNo,
+                    'noti_id' => $notiId,
+                ]);
+
+                return $this->kcpNotifyRetry();
+            }
+
             // 멱등성 — 이미 결제완료 상태면 재처리 없이 0000 응답 (op_cd=01 재전송 대응)
             if ($order->payment?->isPaid() ?? false) {
                 Log::info('KCP: vbank-notify already paid (idempotent)', [
@@ -427,10 +464,8 @@ class PaymentCallbackController
                     'tx_cd' => $txCd,
                     'op_cd' => $opCd,
                     'noti_id' => $notiId,
+                    ...$this->currentCredentialMeta((string) ($validated['site_cd'] ?? '')),
                     'bank_code' => $validated['bank_code'] ?? null,
-                    'account' => $validated['account'] ?? null,
-                    'ipgm_name' => $validated['ipgm_name'] ?? null,
-                    'remitter' => $validated['remitter'] ?? null,
                     'ipgm_time' => $validated['tx_tm'] ?? null,
                     'pg_response_sanitized' => true,
                     'pg_raw_response' => $this->sanitizePgResponse($validated, self::VBANK_NOTIFY_RESPONSE_KEYS),
@@ -609,6 +644,7 @@ class PaymentCallbackController
                 'payment_meta' => [
                     'result_code' => $pgResponse['res_cd'] ?? null,
                     'tno' => $tno ?: null,
+                    ...$this->currentCredentialMeta(),
                     'bankname' => $bankname,
                     'bankcode' => $pgResponse['bankcode'] ?? $pgResponse['bank_code'] ?? null,
                     'va_date' => $pgResponse['va_date'] ?? $pgResponse['vnbank_expire_date'] ?? null,
@@ -641,39 +677,75 @@ class PaymentCallbackController
         return redirect($this->resolveSuccessUrl($ordrIdxx));
     }
 
-    private function markAuthPhaseFailureIfOrderMatches(
-        string $ordrIdxx,
-        ?int $amount,
-        string $failureCode,
-        string $failureMessage,
-    ): void {
-        if (trim($ordrIdxx) === '' || $amount === null || $amount < 1) {
-            return;
+    /**
+     * KCP webhook 이 주장한 값이 결제창에서 발급받아 저장한 값과 일치하는지 확인한다.
+     *
+     * KCP 입금통보에는 별도 서명 필드가 없으므로, 주문번호만 믿지 않고 저장된
+     * tno/site_cd/가상계좌/금액을 모두 대조해 위조 통보를 차단한다.
+     */
+    private function validateVbankNotifyContext(Order $order, array $validated, string $tno, int $amount): ?string
+    {
+        $payment = $order->payment;
+        if (! $payment) {
+            return 'payment_not_found';
         }
 
-        try {
-            $order = $this->orderService->findByOrderNumber($ordrIdxx);
-            if (! $order || $amount !== $this->expectedPaymentPrice($order)) {
-                return;
-            }
-
-            $message = trim($failureMessage) !== ''
-                ? $failureMessage
-                : 'NHN KCP 결제창이 완료되지 않았습니다.';
-
-            $this->markPaymentWindowClosed(
-                $this->orderService,
-                $order,
-                $failureCode !== '' ? $failureCode : 'USER_CANCEL',
-                $message,
-                $message,
-            );
-        } catch (\Throwable $e) {
-            Log::warning('KCP: failed to record auth phase payment cancellation', [
-                'ordr_idxx' => $ordrIdxx,
-                'error' => $e->getMessage(),
-            ]);
+        if (! in_array($payment->payment_method?->value, ['vbank', 'virtual_account'], true)) {
+            return 'payment_method_not_vbank';
         }
+
+        $meta = $payment->payment_meta ?? [];
+        $storedTno = trim((string) ($payment->transaction_id ?: ($meta['tno'] ?? '')));
+        if ($storedTno === '' || ! hash_equals($storedTno, $tno)) {
+            return 'tno_mismatch';
+        }
+
+        $storedSiteCd = trim((string) ($meta['site_cd'] ?? ''));
+        $expectedSiteCd = $storedSiteCd !== '' ? $storedSiteCd : trim($this->apiService->getSiteCd());
+        $receivedSiteCd = trim((string) ($validated['site_cd'] ?? ''));
+        if ($expectedSiteCd === '' || $receivedSiteCd === '' || ! hash_equals($expectedSiteCd, $receivedSiteCd)) {
+            return 'site_cd_mismatch';
+        }
+
+        $storedAccount = trim((string) ($payment->vbank_number ?? ''));
+        $receivedAccount = trim((string) ($validated['account'] ?? ''));
+        if ($storedAccount === '' || $receivedAccount === '' || ! hash_equals($storedAccount, $receivedAccount)) {
+            return 'account_mismatch';
+        }
+
+        $expectedAmount = $this->expectedVbankNotifyAmount($order);
+        if ($amount !== $expectedAmount) {
+            return 'amount_mismatch';
+        }
+
+        return null;
+    }
+
+    private function expectedVbankNotifyAmount(Order $order): int
+    {
+        $payment = $order->payment;
+        $paidAmount = (int) round((float) ($payment?->paid_amount_local ?? 0));
+
+        if (($payment?->isPaid() ?? false) && $paidAmount > 0) {
+            return $paidAmount;
+        }
+
+        return $this->expectedPaymentPrice($order);
+    }
+
+    /**
+     * 결제 당시 KCP 상점 설정을 payment_meta 에 남겨 이후 환불/통보 검증에 사용한다.
+     *
+     * site_key 같은 비밀값은 저장하지 않고, 공개 식별자인 site_cd 와 test/live 모드만 저장한다.
+     *
+     * @return array{site_cd: string, is_test_mode: bool}
+     */
+    private function currentCredentialMeta(string $siteCd = ''): array
+    {
+        return [
+            'site_cd' => $siteCd !== '' ? $siteCd : $this->apiService->getSiteCd(),
+            'is_test_mode' => $this->apiService->isTestMode(),
+        ];
     }
 
     private function resolveSuccessUrl(string $orderId): string
@@ -771,6 +843,18 @@ class PaymentCallbackController
         $path = $url === '' ? '/' : ($url[0] === '/' ? $url : '/'.$url);
 
         return $base.$path;
+    }
+
+    private function isKrwOrder(Order $order): bool
+    {
+        return $this->orderCurrency($order) === 'KRW';
+    }
+
+    private function orderCurrency(Order $order): string
+    {
+        $currency = strtoupper(trim((string) ($order->currency ?? 'KRW')));
+
+        return $currency !== '' ? $currency : 'KRW';
     }
 
     /**
