@@ -202,6 +202,29 @@ class PaymentCallbackControllerTest extends PluginTestCase
         $this->assertNotEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
     }
 
+    public function test_auth_callback_rejects_non_krw_order_before_cli_approval(): void
+    {
+        $order = $this->createTestOrder(50000);
+        $order->currency = 'USD';
+        $order->save();
+        $this->mockPluginSettings();
+
+        $mock = $this->createMock(NhnKcpApiService::class);
+        $mock->expects($this->never())->method('approvePayment');
+        $this->app->instance(NhnKcpApiService::class, $mock);
+
+        $response = $this->post(
+            '/plugins/sirsoft-pay_nhnkcp/payment/callback',
+            $this->makeCallbackParams($order->order_number, 50000)
+        );
+
+        $response->assertRedirect();
+        $this->assertStringContainsString('error=currency_not_supported', $response->headers->get('Location'));
+
+        $order->refresh();
+        $this->assertEquals(OrderStatusEnum::PENDING_ORDER, $order->order_status);
+    }
+
     public function test_auth_callback_stores_only_sanitized_pg_response_fields(): void
     {
         $order = $this->createTestOrder(50000);
@@ -345,7 +368,7 @@ class PaymentCallbackControllerTest extends PluginTestCase
         $this->assertStringNotContainsString('error=', $response->headers->get('Location'));
     }
 
-    public function test_auth_callback_records_user_cancel_when_amount_matches_order(): void
+    public function test_auth_callback_does_not_mutate_order_on_browser_failure_result(): void
     {
         $order = $this->createTestOrder(50000);
         $this->mockPluginSettings();
@@ -361,14 +384,14 @@ class PaymentCallbackControllerTest extends PluginTestCase
         $this->assertStringNotContainsString('error=', $response->headers->get('Location'));
 
         $order->refresh();
-        $this->assertEquals(OrderStatusEnum::CANCELLED, $order->order_status);
-        $this->assertEquals('3001', $order->order_meta['payment_failure_code'] ?? null);
-        $this->assertEquals(PaymentStatusEnum::CANCELLED, $order->payment->payment_status);
-        $this->assertNotNull($order->payment->cancelled_at);
+        $this->assertEquals(OrderStatusEnum::PENDING_ORDER, $order->order_status);
+        $this->assertNull($order->order_meta['payment_failure_code'] ?? null);
+        $this->assertEquals(PaymentStatusEnum::READY, $order->payment->payment_status);
+        $this->assertNull($order->payment->cancelled_at);
         $this->assertSame('nhnkcp', $order->payment->pg_provider);
-        $this->assertSame('nhnkcp', $order->payment->payment_meta['failure_source'] ?? null);
-        $this->assertSame('3001', $order->payment->payment_meta['failure_code'] ?? null);
-        $this->assertSame('window_closed', $order->payment->payment_meta['failure_stage'] ?? null);
+        $this->assertNull($order->payment->payment_meta['failure_source'] ?? null);
+        $this->assertNull($order->payment->payment_meta['failure_code'] ?? null);
+        $this->assertNull($order->payment->payment_meta['failure_stage'] ?? null);
     }
 
     public function test_auth_callback_silently_redirects_on_empty_res_cd(): void

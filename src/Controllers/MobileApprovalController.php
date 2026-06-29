@@ -6,6 +6,7 @@ namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Modules\Sirsoft\Ecommerce\Models\Order;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\RecordsPaymentWindowClosure;
 use Plugins\Sirsoft\PayNhnkcp\Exceptions\NhnKcpApiException;
@@ -90,6 +91,7 @@ class MobileApprovalController
             'buyr_mail' => ['nullable', 'string', 'email', 'max:100'],
             'buyr_tel1' => ['nullable', 'string', 'max:20'],
             'ret_url' => ['required', 'string', 'url'],
+            'currency' => ['nullable', 'string', 'size:3'],
         ]);
 
         $payMethodKey = strtolower($validated['pay_method']);
@@ -122,6 +124,13 @@ class MobileApprovalController
                 return response()->json([
                     'success' => false,
                     'error' => 'Payment amount does not match the order amount.',
+                ], 422);
+            }
+
+            if (! $this->isKrwPayment($order, $validated['currency'] ?? null)) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'NHN KCP supports KRW payments only.',
                 ], 422);
             }
 
@@ -165,7 +174,7 @@ class MobileApprovalController
                 'quotaopt' => '12',
                 'currency' => '410',
                 'approval_key' => $result['approval_key'],
-                ...$this->buildTaxFields($validated['order_number']),
+                ...$this->buildTaxFields($order, (int) $validated['amount']),
             ];
 
             // 가상계좌 전용 파라미터
@@ -207,21 +216,24 @@ class MobileApprovalController
      *
      * @return array<string, string>
      */
-    private function buildTaxFields(string $orderNumber): array
+    private function buildTaxFields(Order $order, int $paymentAmount): array
     {
-        $order = $this->orderService->findByOrderNumber($orderNumber);
-        if (! $order) {
-            return [];
-        }
-
         $taxFreeAmt = (int) round((float) ($order->total_tax_free_amount ?? 0));
         if ($taxFreeAmt <= 0) {
             return [];
         }
 
+        $paymentAmount = max(0, $paymentAmount);
+        $taxFreeAmt = min($taxFreeAmt, $paymentAmount);
+        $taxablePaymentAmt = max(0, $paymentAmount - $taxFreeAmt);
         $taxTotalAmt = (int) round((float) ($order->total_tax_amount ?? 0));
         $vatAmt = (int) round((float) ($order->total_vat_amount ?? 0));
-        $supplyAmt = $taxTotalAmt - $vatAmt; // 공급가액 (VAT 제외)
+        if ($taxablePaymentAmt > 0 && $taxTotalAmt > 0 && $vatAmt > 0) {
+            $vatAmt = min($taxablePaymentAmt, (int) round($taxablePaymentAmt * ($vatAmt / $taxTotalAmt)));
+        } else {
+            $vatAmt = 0;
+        }
+        $supplyAmt = $taxablePaymentAmt - $vatAmt; // 공급가액 (VAT 제외)
 
         return [
             'tax_flag'      => 'TG03',
@@ -229,5 +241,18 @@ class MobileApprovalController
             'comm_vat_mny'  => (string) $vatAmt,
             'comm_free_mny' => (string) $taxFreeAmt,
         ];
+    }
+
+    private function isKrwPayment(Order $order, ?string $requestedCurrency): bool
+    {
+        return $this->normalizeCurrency($requestedCurrency) === 'KRW'
+            && $this->normalizeCurrency((string) ($order->currency ?? 'KRW')) === 'KRW';
+    }
+
+    private function normalizeCurrency(?string $currency): string
+    {
+        $normalized = strtoupper(trim((string) $currency));
+
+        return $normalized !== '' ? $normalized : 'KRW';
     }
 }

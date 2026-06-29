@@ -8,6 +8,8 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
+    buildKcpTaxFields,
+    isSupportedKcpCurrency,
     requestPaymentHandler,
     watchKcpPaymentFrameClosure,
 } from '../../handlers/requestPayment';
@@ -70,6 +72,24 @@ describe('requestPaymentHandler', () => {
                 paymentErrorMessage: '애플페이는 IOS 기기에 모바일결제만 가능합니다.',
                 isSubmittingOrder: false,
                 paymentMethod: 'nhnkcp_applepay',
+            }),
+        );
+        expect(modalOpenSpy).toHaveBeenCalledWith('nhnkcp_payment_error_modal');
+    });
+
+    it('KRW가 아닌 통화는 client config 호출 전 차단', async () => {
+        await requestPaymentHandler({
+            params: {
+                pgPaymentData: { ...PG_PAYMENT, currency: 'USD' },
+            },
+        });
+
+        expect(apiGet).not.toHaveBeenCalled();
+        expect(setLocalSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+                paymentErrorMessage: 'NHN KCP는 KRW 결제만 지원합니다. (USD)',
+                isSubmittingOrder: false,
+                paymentMethod: 'card',
             }),
         );
         expect(modalOpenSpy).toHaveBeenCalledWith('nhnkcp_payment_error_modal');
@@ -165,5 +185,31 @@ describe('requestPaymentHandler', () => {
 
         expect(onClose).not.toHaveBeenCalled();
         vi.useRealTimers();
+    });
+
+    it('복합과세 분할 필드를 실결제액 기준으로 재배분', () => {
+        const fields = buildKcpTaxFields({
+            ...PG_PAYMENT,
+            amount: 19000,
+            tax_amount: 11000,
+            vat_amount: 1000,
+            tax_free_amount: 10000,
+        });
+
+        expect(fields).toEqual({
+            tax_flag: 'TG03',
+            comm_tax_mny: '8182',
+            comm_vat_mny: '818',
+            comm_free_mny: '10000',
+        });
+        expect(
+            Number(fields.comm_tax_mny) + Number(fields.comm_vat_mny) + Number(fields.comm_free_mny),
+        ).toBe(19000);
+    });
+
+    it('KCP 통화 가드는 빈 값과 KRW만 허용', () => {
+        expect(isSupportedKcpCurrency(undefined)).toBe(true);
+        expect(isSupportedKcpCurrency('KRW')).toBe(true);
+        expect(isSupportedKcpCurrency('usd')).toBe(false);
     });
 });

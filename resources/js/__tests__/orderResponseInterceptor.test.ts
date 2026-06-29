@@ -45,6 +45,7 @@ describe('installOrderResponseInterceptor', () => {
                     order: {
                         order_number: 'ORD-100',
                         total_amount: 15000,
+                        total_due_amount: 14000,
                         orderer_name: 'Tester',
                         orderer_email: 'tester@example.test',
                         orderer_phone: '010-1234-5678',
@@ -74,7 +75,7 @@ describe('installOrderResponseInterceptor', () => {
                 pgPaymentData: expect.objectContaining({
                     order_number: 'ORD-100',
                     order_name: '테스트 상품',
-                    amount: 15000,
+                    amount: 14000,
                     customer_phone: '01012345678',
                 }),
                 paymentMethod: 'nhnkcp_naverpay',

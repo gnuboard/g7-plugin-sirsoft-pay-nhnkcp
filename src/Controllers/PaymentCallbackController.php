@@ -154,12 +154,9 @@ class PaymentCallbackController
                 'is_cancelled' => $isCancelled,
             ]);
 
-            $this->markAuthPhaseFailureIfOrderMatches(
-                $ordrIdxx,
-                $goodMny > 0 ? $goodMny : null,
-                $resCd !== '' ? $resCd : 'USER_CANCEL',
-                $resMsg,
-            );
+            // authCallback is a browser-return endpoint without PG-server signature/IP proof.
+            // Do not mutate order state from a non-success browser result alone; the
+            // authenticated close-report path records real window closures.
 
             // 사용자 취소는 오류 없이 체크아웃으로 복귀
             if ($isCancelled) {
@@ -205,6 +202,15 @@ class PaymentCallbackController
             }
 
             $expectedAmount = $this->expectedPaymentPrice($order);
+            if (! $this->isKrwOrder($order)) {
+                Log::warning('KCP: unsupported order currency', [
+                    'ordr_idxx' => $ordrIdxx,
+                    'currency' => $this->orderCurrency($order),
+                ]);
+
+                return redirect($this->resolveFailUrl(['error' => 'currency_not_supported', 'orderId' => $ordrIdxx]));
+            }
+
             if ($goodMny > 0 && $goodMny !== $expectedAmount) {
                 Log::warning('KCP: browser callback amount mismatch before approval', [
                     'ordr_idxx' => $ordrIdxx,
@@ -739,41 +745,6 @@ class PaymentCallbackController
         ];
     }
 
-    private function markAuthPhaseFailureIfOrderMatches(
-        string $ordrIdxx,
-        ?int $amount,
-        string $failureCode,
-        string $failureMessage,
-    ): void {
-        if (trim($ordrIdxx) === '' || $amount === null || $amount < 1) {
-            return;
-        }
-
-        try {
-            $order = $this->orderService->findByOrderNumber($ordrIdxx);
-            if (! $order || $amount !== $this->expectedPaymentPrice($order)) {
-                return;
-            }
-
-            $message = trim($failureMessage) !== ''
-                ? $failureMessage
-                : 'NHN KCP 결제창이 완료되지 않았습니다.';
-
-            $this->markPaymentWindowClosed(
-                $this->orderService,
-                $order,
-                $failureCode !== '' ? $failureCode : 'USER_CANCEL',
-                $message,
-                $message,
-            );
-        } catch (\Throwable $e) {
-            Log::warning('KCP: failed to record auth phase payment cancellation', [
-                'ordr_idxx' => $ordrIdxx,
-                'error' => $e->getMessage(),
-            ]);
-        }
-    }
-
     private function resolveSuccessUrl(string $orderId): string
     {
         $settings = $this->pluginSettingsService->get(self::PLUGIN_IDENTIFIER) ?? [];
@@ -869,6 +840,18 @@ class PaymentCallbackController
         $path = $url === '' ? '/' : ($url[0] === '/' ? $url : '/' . $url);
 
         return $base . $path;
+    }
+
+    private function isKrwOrder(Order $order): bool
+    {
+        return $this->orderCurrency($order) === 'KRW';
+    }
+
+    private function orderCurrency(Order $order): string
+    {
+        $currency = strtoupper(trim((string) ($order->currency ?? 'KRW')));
+
+        return $currency !== '' ? $currency : 'KRW';
     }
 
     /**

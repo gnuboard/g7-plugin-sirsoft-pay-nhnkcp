@@ -5,6 +5,7 @@ namespace Plugins\Sirsoft\PayNhnkcp\Tests\Unit\Services;
 use App\Services\PluginSettingsService;
 use Illuminate\Support\Facades\Http;
 use Plugins\Sirsoft\PayNhnkcp\Exceptions\NhnKcpApiException;
+use Plugins\Sirsoft\PayNhnkcp\Services\KcpSoapService;
 use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
 use Plugins\Sirsoft\PayNhnkcp\Tests\PluginTestCase;
 
@@ -90,6 +91,20 @@ class NhnKcpApiServiceTest extends PluginTestCase
         $service = $this->makeService();
 
         $this->assertEquals(self::TEST_SITE_CD, $service->getSiteCd());
+    }
+
+    public function test_kcp_soap_service_falls_back_to_test_site_cd_when_escrow_test_site_cd_is_empty(): void
+    {
+        $settingsMock = $this->createMock(PluginSettingsService::class);
+        $settingsMock->method('get')->willReturn([
+            'is_test_mode' => true,
+            'test_site_cd' => self::TEST_SITE_CD,
+            'escrow_test_site_cd' => '',
+        ]);
+
+        $service = new KcpSoapService($settingsMock);
+
+        $this->assertSame(self::TEST_SITE_CD, $service->getEscrowSiteCd());
     }
 
     public function test_get_site_cd_returns_live_site_cd_in_live_mode(): void
@@ -247,6 +262,25 @@ class NhnKcpApiServiceTest extends PluginTestCase
             $this->assertStringContainsString('mod_type=RN07', $args);
             $this->assertStringContainsString('mod_mny=10000', $args);
             $this->assertStringContainsString('rem_mny=40000', $args);
+        } finally {
+            $this->removeStubbedCliDirectory($stub['dir']);
+        }
+    }
+
+    public function test_register_escrow_delivery_uses_test_site_cd_when_escrow_test_site_cd_is_empty(): void
+    {
+        $stub = $this->makeServiceWithStubbedCli(
+            'res_cd=0000' . chr(31) . 'res_msg=배송등록완료',
+            ['escrow_test_site_cd' => '']
+        );
+        /** @var NhnKcpApiService $service */
+        $service = $stub['service'];
+
+        try {
+            $service->registerEscrowDelivery('TNO_ESCROW', 'ORD-ESCROW', '1234567890', '04');
+
+            $args = $this->capturedCliArgs($stub['log']);
+            $this->assertStringContainsString('site_cd=' . self::TEST_SITE_CD, $args);
         } finally {
             $this->removeStubbedCliDirectory($stub['dir']);
         }

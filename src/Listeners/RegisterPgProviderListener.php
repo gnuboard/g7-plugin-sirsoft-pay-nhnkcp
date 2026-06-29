@@ -112,7 +112,8 @@ class RegisterPgProviderListener implements HookListenerInterface
         $easyPayClientId = $isTest ? $easyPayTestSiteCd : $liveSiteCd;
 
         $useEscrow = (bool) ($settings['use_escrow'] ?? false);
-        $escrowClientId = $isTest ? ($settings['escrow_test_site_cd'] ?? 'T0007') : $siteCd;
+        $escrowTestSiteCd = trim((string) ($settings['escrow_test_site_cd'] ?? ''));
+        $escrowClientId = $isTest && $escrowTestSiteCd !== '' ? $escrowTestSiteCd : $siteCd;
 
         return array_merge($config, [
             'client_id' => $siteCd,
