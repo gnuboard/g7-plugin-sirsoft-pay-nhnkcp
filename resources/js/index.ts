@@ -3,8 +3,6 @@ import { installOrderResponseInterceptor } from './orderResponseInterceptor';
 import { installOrderCompleteReceiptInjector } from './orderCompleteReceiptInjector';
 import { installMypageOrderShowInjector } from './mypageOrderShowInjector';
 import { installCheckoutEasyPayInjector } from './checkoutEasyPayInjector';
-import { installAdminApplePayNoticeInjector } from './adminApplePayNoticeInjector';
-import { installAdminPaymentMethodBrandInjector } from './adminPaymentMethodBrandInjector';
 
 class KcpReceiptPopup {
     constructor(params: { url?: string; cash_url?: string }) {
@@ -98,8 +96,6 @@ installOrderResponseInterceptor();
 installOrderCompleteReceiptInjector();
 installMypageOrderShowInjector();
 installCheckoutEasyPayInjector();
-installAdminApplePayNoticeInjector();
-installAdminPaymentMethodBrandInjector();
 initPlugin();
 
 (window as Record<string, unknown>).__SirsoftNhnkcp = {

@@ -10,7 +10,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Plugins\Sirsoft\PayNhnkcp\Concerns\SanitizesPgResponse;
 use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
 
 /**
@@ -21,16 +20,6 @@ use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
  */
 class AdminEscrowDeliveryController extends AdminBaseController
 {
-    use SanitizesPgResponse;
-
-    private const ESCROW_DELIVERY_RESPONSE_KEYS = [
-        'res_cd',
-        'res_msg',
-        'tno',
-        'deli_numb',
-        'deli_corp',
-    ];
-
     /** KCP 에스크로 택배사 코드표 */
     private const COURIER_CODES = [
         '04' => 'CJ대한통운',
@@ -155,8 +144,7 @@ class AdminEscrowDeliveryController extends AdminBaseController
                 'deli_numb'     => $deliNumb,
                 'deli_corp'     => $deliCorp,
                 'courier_name'  => $courierName,
-                'pg_response_sanitized' => true,
-                'pg_response'   => $this->sanitizePgResponse($pgResponse, self::ESCROW_DELIVERY_RESPONSE_KEYS),
+                'pg_response'   => $pgResponse,
             ];
 
             DB::table('ecommerce_order_payments')

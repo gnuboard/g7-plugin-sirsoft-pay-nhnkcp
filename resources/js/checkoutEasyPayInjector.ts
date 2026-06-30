@@ -1,429 +1,208 @@
-import {
-    isIosMobileDevice,
-    isNhnKcpApplePayMethod,
-} from './support/applePayDevice';
-
 const PLUGIN_ID = 'sirsoft-pay_nhnkcp';
 const FLAG = '__kcpCheckoutEasyPayInjectorInstalled';
+const CONTAINER_ID = 'nhnkcp-checkout-easy-pay';
+const LISTENER_FLAG = '__kcpClearListenerAttached';
 const CHECKOUT_RE = /^\/shop\/checkout\/?$/;
-const LISTENER_FLAG = '__kcpCheckoutEasyPaySyncListenerAttached';
-const SYNC_RETRY_INTERVAL_MS = 200;
-const SYNC_RETRY_ATTEMPTS = 120;
 
-interface EasyPayCopy {
-    heading: string;
-    description: string;
-    title: string;
-}
+const EASY_PAYS = [
+    { key: 'PAYCO',          method: 'nhnkcp_payco',          label: 'PAYCO',           cls: 'bg-red-500 text-white' },
+    { key: 'NAVERPAY',       method: 'nhnkcp_naverpay',       label: '네이버페이',        cls: 'bg-green-500 text-white' },
+    { key: 'NAVERPAY POINT', method: 'nhnkcp_naverpay_point', label: '네이버페이 포인트', cls: 'bg-green-600 text-white' },
+    { key: 'KAKAOPAY',       method: 'nhnkcp_kakaopay',       label: '카카오페이',        cls: 'bg-yellow-400 text-gray-900' },
+    { key: 'APPLEPAY',       method: 'nhnkcp_applepay',       label: 'Apple Pay',        cls: 'bg-gray-900 dark:bg-gray-950 text-white' },
+] as const;
 
-interface EasyPayDefinition {
-    id: string;
-    configKey: string;
-    labels: string[];
-    ko: EasyPayCopy;
-    en: EasyPayCopy;
-    markText: string;
-    markClassName: string;
-}
+let cachedEnabledPays: string[] | null = null;
 
-const EASY_PAY_DEFINITIONS: EasyPayDefinition[] = [
-    {
-        id: 'nhnkcp_payco',
-        configKey: 'PAYCO',
-        labels: ['PAYCO (NHN KCP)', 'PAYCO NHN KCP 간편결제', 'PAYCO로 결제 (NHN KCP)', 'Pay with PAYCO (NHN KCP)'],
-        ko: {
-            heading: 'PAYCO',
-            description: 'PAYCO로 결제 (NHN KCP)',
-            title: 'PAYCO로 결제 (NHN KCP)',
-        },
-        en: {
-            heading: 'PAYCO',
-            description: 'Pay with PAYCO (NHN KCP)',
-            title: 'Pay with PAYCO (NHN KCP)',
-        },
-        markText: 'P',
-        markClassName: 'bg-red-500 text-white',
-    },
-    {
-        id: 'nhnkcp_naverpay',
-        configKey: 'NAVERPAY',
-        labels: ['네이버페이 (NHN KCP)', '네이버페이 신용카드로 결제 (NHN KCP)', 'NaverPay NHN KCP 간편결제', 'Naver Pay (NHN KCP)', 'NaverPay (NHN KCP)', 'Pay by Naver Pay credit card (NHN KCP)'],
-        ko: {
-            heading: '네이버페이 (카드)',
-            description: '네이버페이 신용카드로 결제 (NHN KCP)',
-            title: '네이버페이 신용카드로 결제 (NHN KCP)',
-        },
-        en: {
-            heading: 'Naver Pay (Card)',
-            description: 'Pay by Naver Pay credit card (NHN KCP)',
-            title: 'Pay by Naver Pay credit card (NHN KCP)',
-        },
-        markText: 'N',
-        markClassName: 'bg-green-500 text-white',
-    },
-    {
-        id: 'nhnkcp_naverpay_point',
-        configKey: 'NAVERPAY POINT',
-        labels: ['네이버페이 포인트 (NHN KCP)', '네이버페이 머니/포인트로 결제 (NHN KCP)', 'NaverPay 포인트 NHN KCP 포인트 간편결제', 'Naver Pay Point (NHN KCP)', 'NaverPay Point (NHN KCP)', 'Pay with Naver Pay Money/Points (NHN KCP)'],
-        ko: {
-            heading: '네이버페이 (포인트)',
-            description: '네이버페이 머니/포인트로 결제 (NHN KCP)',
-            title: '네이버페이 머니/포인트로 결제 (NHN KCP)',
-        },
-        en: {
-            heading: 'Naver Pay (Point)',
-            description: 'Pay with Naver Pay Money/Points (NHN KCP)',
-            title: 'Pay with Naver Pay Money/Points (NHN KCP)',
-        },
-        markText: 'NP',
-        markClassName: 'bg-green-600 text-white',
-    },
-    {
-        id: 'nhnkcp_kakaopay',
-        configKey: 'KAKAOPAY',
-        labels: ['카카오페이 (NHN KCP)', '카카오페이로 결제 (NHN KCP)', 'KakaoPay NHN KCP 간편결제', 'Kakao Pay (NHN KCP)', 'KakaoPay (NHN KCP)', 'Pay with Kakao Pay (NHN KCP)'],
-        ko: {
-            heading: '카카오페이',
-            description: '카카오페이로 결제 (NHN KCP)',
-            title: '카카오페이로 결제 (NHN KCP)',
-        },
-        en: {
-            heading: 'Kakao Pay',
-            description: 'Pay with Kakao Pay (NHN KCP)',
-            title: 'Pay with Kakao Pay (NHN KCP)',
-        },
-        markText: 'K',
-        markClassName: 'bg-yellow-400 text-gray-950',
-    },
-    {
-        id: 'nhnkcp_applepay',
-        configKey: 'APPLEPAY',
-        labels: ['애플페이 (NHN KCP)', '애플페이로 결제 (NHN KCP)', 'Apple Pay NHN KCP 간편결제', 'Apple Pay (NHN KCP)', 'Pay with Apple Pay (NHN KCP)'],
-        ko: {
-            heading: '애플페이',
-            description: '애플페이로 결제 (NHN KCP)',
-            title: '애플페이로 결제 (NHN KCP)',
-        },
-        en: {
-            heading: 'Apple Pay',
-            description: 'Pay with Apple Pay (NHN KCP)',
-            title: 'Pay with Apple Pay (NHN KCP)',
-        },
-        markText: 'A',
-        markClassName: 'bg-gray-900 text-white',
-    },
-];
-
-let observer: MutationObserver | null = null;
-let retryTimer: number | null = null;
-let syncQueued = false;
-
-function windowRecord(): Record<string, unknown> {
-    return window as unknown as Record<string, unknown>;
-}
-
-function isCheckoutPage(): boolean {
-    return CHECKOUT_RE.test(window.location.pathname);
-}
-
-function normalizedText(value: string | null | undefined): string {
-    return (value ?? '').replace(/\s+/g, ' ').trim();
-}
-
-function isKoreanPage(): boolean {
-    const lang = document.documentElement.lang || navigator.language || '';
-
-    return lang.toLowerCase().startsWith('ko');
-}
-
-function copyFor(definition: EasyPayDefinition): EasyPayCopy {
-    return isKoreanPage() ? definition.ko : definition.en;
-}
-
-function displayText(value: string): string {
-    return value
-        .replaceAll('네이버페이', '네이\u200B버페이')
-        .replaceAll('카카오페이', '카카\u200B오페이')
-        .replaceAll('Naver Pay', 'Naver\u200B Pay')
-        .replaceAll('Kakao Pay', 'Kakao\u200B Pay');
-}
-
-function findDefinitionById(id: string | undefined): EasyPayDefinition | null {
-    return EASY_PAY_DEFINITIONS.find((definition) => definition.id === id) ?? null;
-}
-
-function findDefinitionForButton(button: HTMLButtonElement): EasyPayDefinition | null {
-    const markedDefinition = findDefinitionById(button.dataset.nhnkcpEasyPayMethod);
-    if (markedDefinition) return markedDefinition;
-
-    const text = normalizedText(button.textContent);
-
-    return EASY_PAY_DEFINITIONS.find((definition) => (
-        definition.labels.some((label) => text.includes(label))
-    )) ?? null;
-}
-
-function findPaymentRow(button: HTMLButtonElement): HTMLElement | null {
-    return button.querySelector<HTMLElement>('.flex.items-center.gap-2, .flex.items-center.gap-3')
-        ?? button.querySelector<HTMLElement>('.flex.items-center');
-}
-
-function alignPaymentTextLeft(button: HTMLButtonElement, heading?: HTMLElement, description?: HTMLElement): void {
-    button.style.textAlign = 'left';
-
-    const row = findPaymentRow(button);
-    if (row) {
-        row.style.justifyContent = 'flex-start';
-        row.style.textAlign = 'left';
-        row.style.width = '100%';
-    }
-
-    const textContainer = heading?.parentElement ?? description?.parentElement;
-    if (textContainer instanceof HTMLElement) {
-        textContainer.style.textAlign = 'left';
-        textContainer.style.minWidth = '0';
-    }
-}
-
-function createMark(definition: EasyPayDefinition): HTMLSpanElement {
-    const mark = document.createElement('span');
-    mark.dataset.nhnkcpEasyPayMark = 'true';
-    mark.dataset.nhnkcpEasyPayMethod = definition.id;
-    mark.setAttribute('aria-hidden', 'true');
-    mark.className = `inline-flex items-center justify-center rounded-lg text-xs font-bold ${definition.markClassName}`;
-    mark.style.width = '32px';
-    mark.style.height = '32px';
-    mark.style.flex = '0 0 32px';
-    mark.textContent = definition.markText;
-
-    return mark;
-}
-
-function removeKginicisBrandArtifacts(button: HTMLButtonElement): void {
-    delete button.dataset.kginicisBrandPaymentButton;
-    delete button.dataset.kginicisBrandPaymentMethod;
-    delete button.dataset.kginicisNaverpayBrandButton;
-
-    button.querySelectorAll<HTMLElement>('[data-kginicis-brand-payment-mark="true"], [data-kginicis-naverpay-mark="true"]').forEach((element) => {
-        element.remove();
-    });
-
-    button.querySelectorAll<HTMLElement>('[data-kginicis-brand-payment-heading], [data-kginicis-brand-payment-description], [data-kginicis-naverpay-heading], [data-kginicis-naverpay-description]').forEach((element) => {
-        delete element.dataset.kginicisBrandPaymentHeading;
-        delete element.dataset.kginicisBrandPaymentDescription;
-        delete element.dataset.kginicisNaverpayHeading;
-        delete element.dataset.kginicisNaverpayDescription;
-    });
-}
-
-function findPaymentIcon(button: HTMLButtonElement): Element | null {
-    return button.querySelector('[data-kginicis-brand-payment-mark="true"], [data-kginicis-naverpay-mark="true"]')
-        ?? button.querySelector('[data-nhnkcp-easy-pay-mark="true"]')
-        ?? button.querySelector('svg')
-        ?? button.querySelector('i[class*="fa-"], i[role="img"], i');
-}
-
-function ensureMark(button: HTMLButtonElement, definition: EasyPayDefinition): void {
-    const existingMark = button.querySelector<HTMLElement>('[data-nhnkcp-easy-pay-mark="true"]');
-    if (existingMark) {
-        existingMark.dataset.nhnkcpEasyPayMethod = definition.id;
-        existingMark.className = `inline-flex items-center justify-center rounded-lg text-xs font-bold ${definition.markClassName}`;
-        existingMark.textContent = definition.markText;
-        return;
-    }
-
-    const mark = createMark(definition);
-    const icon = findPaymentIcon(button);
-    if (icon && icon.parentElement) {
-        icon.replaceWith(mark);
-        return;
-    }
-
-    const row = findPaymentRow(button);
-    row?.prepend(mark);
-}
-
-function updatePaymentText(button: HTMLButtonElement, definition: EasyPayDefinition): void {
-    const paragraphs = Array.from(button.querySelectorAll<HTMLParagraphElement>('p'));
-    const copy = copyFor(definition);
-    const headingText = displayText(copy.heading);
-    const descriptionText = displayText(copy.description);
-
-    const heading = paragraphs[0];
-    const description = paragraphs[1];
-
-    if (heading && heading.textContent !== headingText) {
-        heading.textContent = headingText;
-    }
-    if (heading) {
-        heading.setAttribute('aria-label', copy.heading);
-        heading.style.textAlign = 'left';
-        heading.style.whiteSpace = 'normal';
-        heading.style.wordBreak = 'keep-all';
-        heading.style.overflowWrap = 'anywhere';
-    }
-
-    if (description && description.textContent !== descriptionText) {
-        description.textContent = descriptionText;
-    }
-    if (description) {
-        description.style.textAlign = 'left';
-        description.style.fontSize = '12px';
-        description.style.lineHeight = '1rem';
-        description.style.whiteSpace = 'normal';
-        description.style.wordBreak = 'keep-all';
-        description.style.overflowWrap = 'anywhere';
-    }
-
-    alignPaymentTextLeft(button, heading, description);
-    button.title = copy.title;
-}
-
-function showButton(button: HTMLButtonElement, definition: EasyPayDefinition): void {
-    if (isNhnKcpApplePayMethod(definition.id) && !isIosMobileDevice()) {
-        button.hidden = true;
-        button.disabled = true;
-        button.style.display = 'none';
-        button.setAttribute('aria-hidden', 'true');
-        button.dataset.nhnkcpEasyPayMethod = definition.id;
-        button.dataset.nhnkcpEasyPayHidden = 'true';
-        delete button.dataset.nhnkcpEasyPayVisible;
-        return;
-    }
-
-    if (button.hidden) button.hidden = false;
-    if (button.disabled) button.disabled = false;
-    if (button.style.display === 'none') button.style.removeProperty('display');
-    button.removeAttribute('aria-hidden');
-    button.dataset.nhnkcpEasyPayMethod = definition.id;
-    button.dataset.nhnkcpEasyPayVisible = 'true';
-    delete button.dataset.nhnkcpEasyPayHidden;
-
-    removeKginicisBrandArtifacts(button);
-    ensureMark(button, definition);
-    updatePaymentText(button, definition);
-}
-
-function reconcileKginicisPatchedDuplicates(root: ParentNode): boolean {
-    const duplicateGroups: Record<string, string[]> = {
-        kginicis_naverpay: ['nhnkcp_naverpay', 'nhnkcp_naverpay_point'],
-        kginicis_kakaopay: ['nhnkcp_kakaopay'],
-    };
-    let changed = false;
-
-    Object.entries(duplicateGroups).forEach(([kginicisMethod, nhnkcpMethods]) => {
-        const buttons = Array.from(root.querySelectorAll<HTMLButtonElement>(`button[data-kginicis-brand-payment-method="${kginicisMethod}"]`))
-            .filter((button) => !button.dataset.nhnkcpEasyPayMethod);
-
-        buttons.slice(1).forEach((button, index) => {
-            const definition = findDefinitionById(nhnkcpMethods[index]);
-            if (!definition) return;
-
-            showButton(button, definition);
-            changed = true;
+async function fetchEnabledPays(): Promise<string[]> {
+    if (cachedEnabledPays !== null) return cachedEnabledPays;
+    try {
+        const token = localStorage.getItem('auth_token');
+        const res = await fetch('/api/modules/sirsoft-ecommerce/payments/client-config/nhnkcp', {
+            headers: { Authorization: token ? `Bearer ${token}` : '', Accept: 'application/json' },
         });
-    });
-
-    return changed;
+        if (!res.ok) {
+            cachedEnabledPays = [];
+            return [];
+        }
+        const json = (await res.json()) as { data?: { enabled_easy_pays?: string[] } };
+        cachedEnabledPays = json.data?.enabled_easy_pays ?? [];
+    } catch {
+        cachedEnabledPays = [];
+    }
+    return cachedEnabledPays;
 }
 
-export async function syncRenderedCheckoutEasyPayMethods(
-    root: ParentNode = document,
-): Promise<boolean> {
-    if (typeof window === 'undefined' || typeof document === 'undefined') return false;
-    if (!isCheckoutPage()) return false;
+function findPaymentContainer(): Element | null {
+    const h2 = Array.from(document.querySelectorAll<HTMLElement>('h2')).find(
+        el => el.textContent?.includes('결제'),
+    );
+    if (!h2) return null;
 
-    let changed = false;
+    let el: Element | null = h2.parentElement;
+    while (el && el !== document.body) {
+        if (el.tagName === 'DIV' && el.className?.includes('rounded-lg') && el.className?.includes('border')) {
+            return el;
+        }
+        el = el.parentElement;
+    }
+    return null;
+}
 
-    root.querySelectorAll<HTMLButtonElement>('button').forEach((button) => {
-        const definition = findDefinitionForButton(button);
-        if (!definition) return;
-
-        showButton(button, definition);
-        changed = true;
+function updateButtonStyles(selectedMethod: string | null): void {
+    const container = document.getElementById(CONTAINER_ID);
+    if (!container) return;
+    container.querySelectorAll<HTMLButtonElement>('button[data-kcp-method]').forEach(btn => {
+        btn.style.boxShadow =
+            btn.dataset.kcpMethod === selectedMethod
+                ? '0 0 0 2px #ffffff, 0 0 0 5px rgba(0,0,0,0.55)'
+                : '';
     });
+}
 
-    if (reconcileKginicisPatchedDuplicates(root)) {
-        changed = true;
+function setEasyPayMethod(method: string): void {
+    const g7 = (window as unknown as Record<string, unknown>).G7Core as Record<string, unknown> | undefined;
+    (g7?.state as Record<string, unknown> | undefined)?.setLocal?.({
+        paymentMethod: method,
+        serverPaymentMethod: 'card',
+    });
+    updateButtonStyles(method);
+}
+
+function attachClearListener(payContainer: Element): void {
+    const el = payContainer as Element & Record<string, unknown>;
+    if (el[LISTENER_FLAG]) return;
+    el[LISTENER_FLAG] = true;
+    payContainer.addEventListener('click', e => {
+        const target = e.target as Element;
+        const easySection = document.getElementById(CONTAINER_ID);
+        if (easySection && !easySection.contains(target)) {
+            updateButtonStyles(null);
+        }
+    });
+}
+
+/**
+ * GNU5 orderform.sub.php 동일 패턴:
+ * Apple Pay는 iPhone/iPad/iPod (iOS Safari) 에서만 동작하므로
+ * UA에 Apple 기기 식별자가 있을 때만 버튼을 노출한다.
+ */
+function isApplePayDevice(): boolean {
+    if (typeof navigator === 'undefined') return false;
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
+function buildEasyPaySection(enabledPays: string[]): HTMLElement | null {
+    const btns: HTMLElement[] = [];
+
+    for (const { key, method, label, cls } of EASY_PAYS) {
+        if (!enabledPays.includes(key)) continue;
+        if (key === 'APPLEPAY' && !isApplePayDevice()) continue;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.dataset.kcpMethod = method;
+        btn.className = `px-4 py-2 rounded-lg text-sm font-bold ${cls} hover:opacity-90`;
+        btn.textContent = label;
+        btn.addEventListener('click', () => setEasyPayMethod(method));
+        btns.push(btn);
     }
 
-    return changed;
+    if (btns.length === 0) return null;
+
+    const wrap = document.createElement('div');
+    wrap.id = CONTAINER_ID;
+    wrap.className = 'mt-4 pt-4 mb-4 border-t border-gray-200 dark:border-gray-700';
+
+    const title = document.createElement('p');
+    title.className = 'text-sm font-medium text-gray-700 dark:text-gray-300 mb-3';
+    title.textContent = 'KCP 간편결제';
+
+    const btnWrap = document.createElement('div');
+    btnWrap.className = 'nhnkcp-easy-pay-btns flex flex-wrap gap-2';
+    btns.forEach(b => btnWrap.appendChild(b));
+
+    wrap.appendChild(title);
+    wrap.appendChild(btnWrap);
+    return wrap;
 }
 
-function queueSync(): void {
-    if (syncQueued) return;
-    syncQueued = true;
+let isInjecting = false;
+let pollingId: ReturnType<typeof setInterval> | null = null;
 
-    window.setTimeout(() => {
-        syncQueued = false;
-        void syncRenderedCheckoutEasyPayMethods();
-    }, 0);
+async function tryInject(): Promise<boolean> {
+    if (document.getElementById(CONTAINER_ID)) return true;
+    if (isInjecting) return false; // 비동기 주입 중 → 재시도
+
+    const payContainer = findPaymentContainer();
+    if (!payContainer) return false;
+
+    isInjecting = true;
+    try {
+        const enabledPays = await fetchEnabledPays();
+
+        // async 대기 중 다른 폴이 먼저 주입했을 수 있으므로 재확인
+        if (document.getElementById(CONTAINER_ID)) return true;
+        if (enabledPays.length === 0) return true;
+
+        const section = buildEasyPaySection(enabledPays);
+        if (!section) return true;
+
+        payContainer.appendChild(section);
+        attachClearListener(payContainer);
+        console.info(`[${PLUGIN_ID}] checkout easy pay injected`);
+        return false;
+    } finally {
+        isInjecting = false;
+    }
 }
 
-function stopRetries(): void {
-    if (retryTimer === null) return;
-
-    window.clearInterval(retryTimer);
-    retryTimer = null;
-}
-
-function startSync(): void {
-    if (!isCheckoutPage()) return;
-
-    stopRetries();
-    void syncRenderedCheckoutEasyPayMethods();
+function startPolling(): void {
+    // 기존 interval 제거 후 재시작 (중복 방지)
+    if (pollingId !== null) {
+        clearInterval(pollingId);
+        pollingId = null;
+    }
+    cachedEnabledPays = null;
+    void fetchEnabledPays(); // API 선제 호출
 
     let attempts = 0;
-    retryTimer = window.setInterval(() => {
-        attempts += 1;
-        void syncRenderedCheckoutEasyPayMethods();
-
-        if (attempts >= SYNC_RETRY_ATTEMPTS) {
-            stopRetries();
-        }
-    }, SYNC_RETRY_INTERVAL_MS);
-
-    const body = document.body as HTMLElement & Record<string, unknown>;
-    if (body[LISTENER_FLAG]) return;
-    body[LISTENER_FLAG] = true;
-
-    observer = new MutationObserver(() => queueSync());
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    pollingId = setInterval(() => {
+        attempts++;
+        void tryInject().then(done => {
+            if (done || attempts >= 50) {
+                if (pollingId !== null) clearInterval(pollingId);
+                pollingId = null;
+            }
+        });
+    }, 200);
 }
 
 function onRouteChange(): void {
-    if (isCheckoutPage()) startSync();
+    if (CHECKOUT_RE.test(location.pathname)) startPolling();
 }
 
 export function installCheckoutEasyPayInjector(): void {
-    if (typeof window === 'undefined' || typeof document === 'undefined') return;
-    const w = windowRecord();
+    if (typeof window === 'undefined') return;
+    const w = window as unknown as Record<string, unknown>;
     if (w[FLAG]) return;
     w[FLAG] = true;
 
-    console.info(`[${PLUGIN_ID}] checkout easy pay method sync installed`);
+    console.info(`[${PLUGIN_ID}] checkout easy pay injector installed`);
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => startSync());
-    } else {
-        startSync();
+    // 현재 페이지가 이미 체크아웃이면 즉시 시작
+    if (CHECKOUT_RE.test(location.pathname)) {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => startPolling());
+        } else {
+            startPolling();
+        }
     }
 
+    // SPA 이동 감지
     const origPush = history.pushState.bind(history);
     history.pushState = (...args: Parameters<typeof history.pushState>) => {
         origPush(...args);
-        window.setTimeout(() => onRouteChange(), 200);
+        setTimeout(onRouteChange, 200); // 600ms → 200ms
     };
-    window.addEventListener('popstate', () => window.setTimeout(() => onRouteChange(), 200));
-}
-
-export function resetCheckoutEasyPayInjectorForTests(): void {
-    observer?.disconnect();
-    observer = null;
-    stopRetries();
-    syncQueued = false;
-    delete windowRecord()[FLAG];
-    if (document.body) {
-        delete ((document.body as HTMLElement & Record<string, unknown>)[LISTENER_FLAG]);
-    }
+    window.addEventListener('popstate', () => setTimeout(onRouteChange, 200));
 }

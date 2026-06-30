@@ -19,11 +19,6 @@
  */
 
 import { requestPaymentHandler } from './handlers/requestPayment';
-import {
-    applePayUnsupportedMessage,
-    isIosMobileDevice,
-    isNhnKcpApplePayMethod,
-} from './support/applePayDevice';
 
 const ORDER_CREATE_PATH = '/api/modules/sirsoft-ecommerce/user/orders';
 const TARGET_PG_PROVIDER = 'sirsoft-nhnkcp';
@@ -82,23 +77,6 @@ function mutateResponse(originalResponse: Response, mutatedBody: OrderCreateResp
         status: originalResponse.status,
         statusText: originalResponse.statusText,
         headers: originalResponse.headers,
-    });
-}
-
-function buildPaymentMethodBlockedResponse(message: string): Response {
-    return new Response(JSON.stringify({
-        success: false,
-        message,
-        error: message,
-        errors: {
-            payment_method: [message],
-        },
-    }), {
-        status: 422,
-        statusText: 'Unprocessable Content',
-        headers: {
-            'Content-Type': 'application/json',
-        },
     });
 }
 
@@ -182,12 +160,6 @@ export function installOrderResponseInterceptor(): void {
             } catch { /* ignore */ }
         }
 
-        if (isNhnKcpApplePayMethod(originalPaymentMethod) && !isIosMobileDevice()) {
-            const message = applePayUnsupportedMessage();
-            logger.warn(message);
-            return buildPaymentMethodBlockedResponse(message);
-        }
-
         // easy pay일 때 browserFetch(원본)를 사용해 KG 이니시스 등 다른 PG 인터셉터 우회
         // 기본 PG가 KG 이니시스여도 NHN KCP 결제창이 열리도록 함
         const fetchFn = originalPaymentMethod ? browserFetch : originalFetch;
@@ -235,7 +207,7 @@ export function installOrderResponseInterceptor(): void {
             pgPaymentData = {
                 order_number: orderData.order_number,
                 order_name: orderName,
-                amount: Math.floor(Number(orderData.total_due_amount ?? orderData.total_amount ?? 0)),
+                amount: Math.floor(Number(orderData.total_amount ?? 0)),
                 currency: 'KRW',
                 customer_name: orderData.orderer_name ?? null,
                 customer_email: orderData.orderer_email ?? null,

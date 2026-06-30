@@ -8,8 +8,6 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
-    buildKcpTaxFields,
-    isSupportedKcpCurrency,
     requestPaymentHandler,
     watchKcpPaymentFrameClosure,
 } from '../../handlers/requestPayment';
@@ -24,17 +22,13 @@ const PG_PAYMENT = {
 describe('requestPaymentHandler', () => {
     let apiGet: ReturnType<typeof vi.fn>;
     let setLocalSpy: ReturnType<typeof vi.fn>;
-    let modalOpenSpy: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
         apiGet = vi.fn();
         setLocalSpy = vi.fn();
-        modalOpenSpy = vi.fn();
-        document.documentElement.lang = 'ko';
         (window as Record<string, unknown>).G7Core = {
             api: { get: apiGet },
             state: { setLocal: setLocalSpy },
-            modal: { open: modalOpenSpy },
             toast: { error: vi.fn() },
         };
     });
@@ -56,43 +50,6 @@ describe('requestPaymentHandler', () => {
         );
         expect(apiGet).not.toHaveBeenCalled();
         expect(setLocalSpy).not.toHaveBeenCalled();
-    });
-
-    it('iOS 모바일 기기가 아니면 Apple Pay 결제 요청을 client config 호출 전 차단', async () => {
-        await requestPaymentHandler({
-            params: {
-                pgPaymentData: PG_PAYMENT,
-                paymentMethod: 'nhnkcp_applepay',
-            },
-        });
-
-        expect(apiGet).not.toHaveBeenCalled();
-        expect(setLocalSpy).toHaveBeenCalledWith(
-            expect.objectContaining({
-                paymentErrorMessage: '애플페이는 IOS 기기에 모바일결제만 가능합니다.',
-                isSubmittingOrder: false,
-                paymentMethod: 'nhnkcp_applepay',
-            }),
-        );
-        expect(modalOpenSpy).toHaveBeenCalledWith('nhnkcp_payment_error_modal');
-    });
-
-    it('KRW가 아닌 통화는 client config 호출 전 차단', async () => {
-        await requestPaymentHandler({
-            params: {
-                pgPaymentData: { ...PG_PAYMENT, currency: 'USD' },
-            },
-        });
-
-        expect(apiGet).not.toHaveBeenCalled();
-        expect(setLocalSpy).toHaveBeenCalledWith(
-            expect.objectContaining({
-                paymentErrorMessage: 'NHN KCP는 KRW 결제만 지원합니다. (USD)',
-                isSubmittingOrder: false,
-                paymentMethod: 'card',
-            }),
-        );
-        expect(modalOpenSpy).toHaveBeenCalledWith('nhnkcp_payment_error_modal');
     });
 
     it('client config 응답에 data 가 없으면 console.error 후 조기 반환', async () => {
@@ -185,31 +142,5 @@ describe('requestPaymentHandler', () => {
 
         expect(onClose).not.toHaveBeenCalled();
         vi.useRealTimers();
-    });
-
-    it('복합과세 분할 필드를 실결제액 기준으로 재배분', () => {
-        const fields = buildKcpTaxFields({
-            ...PG_PAYMENT,
-            amount: 19000,
-            tax_amount: 11000,
-            vat_amount: 1000,
-            tax_free_amount: 10000,
-        });
-
-        expect(fields).toEqual({
-            tax_flag: 'TG03',
-            comm_tax_mny: '8182',
-            comm_vat_mny: '818',
-            comm_free_mny: '10000',
-        });
-        expect(
-            Number(fields.comm_tax_mny) + Number(fields.comm_vat_mny) + Number(fields.comm_free_mny),
-        ).toBe(19000);
-    });
-
-    it('KCP 통화 가드는 빈 값과 KRW만 허용', () => {
-        expect(isSupportedKcpCurrency(undefined)).toBe(true);
-        expect(isSupportedKcpCurrency('KRW')).toBe(true);
-        expect(isSupportedKcpCurrency('usd')).toBe(false);
     });
 });

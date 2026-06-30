@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
 
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Http;
 
 /**
  * NHN KCP 플러그인 시스템 점검 컨트롤러
@@ -55,10 +54,7 @@ class HealthCheckController
             $this->checkWsdlFile(),
         ];
 
-        $summary = array_merge(
-            $this->summarize($checks, $cliFilename),
-            ['cancel_server_ip' => $this->resolveCancelServerIp()]
-        );
+        $summary = $this->summarize($checks, $cliFilename);
 
         return response()->json([
             'success' => true,
@@ -151,90 +147,6 @@ class HealthCheckController
     private function isErroneous(?array $check): bool
     {
         return ($check['status'] ?? self::STATUS_ERROR) === self::STATUS_ERROR;
-    }
-
-    /**
-     * KCP 상점관리자 결제서버 IP 설정에 등록할 서버 IP 후보를 반환한다.
-     *
-     * 실제 취소 요청은 서버에서 KCP로 나가므로 공인 outbound IP가 가장 정확하다.
-     * 외부 조회가 실패하면 PHP 서버 변수/호스트명에서 확인 가능한 IP를 fallback으로 제공한다.
-     *
-     * @return array{address: string|null, source: string, source_label: string}
-     */
-    private function resolveCancelServerIp(): array
-    {
-        $publicIp = $this->detectPublicOutboundIp();
-        if ($publicIp !== null) {
-            return [
-                'address' => $publicIp,
-                'source' => 'public_outbound',
-                'source_label' => '공인 송신 IP',
-            ];
-        }
-
-        $serverIp = $this->detectServerVariableIp();
-        if ($serverIp !== null) {
-            return [
-                'address' => $serverIp,
-                'source' => 'server_variable',
-                'source_label' => '서버 IP 후보',
-            ];
-        }
-
-        return [
-            'address' => null,
-            'source' => 'unavailable',
-            'source_label' => '확인 필요',
-        ];
-    }
-
-    private function detectPublicOutboundIp(): ?string
-    {
-        try {
-            $response = Http::timeout(2)
-                ->acceptJson()
-                ->get('https://api.ipify.org', ['format' => 'json']);
-
-            if (! $response->ok()) {
-                return null;
-            }
-
-            $ip = trim((string) ($response->json('ip') ?? ''));
-
-            return $this->normalizeIp($ip);
-        } catch (\Throwable) {
-            return null;
-        }
-    }
-
-    private function detectServerVariableIp(): ?string
-    {
-        $candidates = [
-            (string) request()->server('SERVER_ADDR', ''),
-            (string) ($_SERVER['SERVER_ADDR'] ?? ''),
-            (string) request()->server('LOCAL_ADDR', ''),
-            (string) ($_SERVER['LOCAL_ADDR'] ?? ''),
-            gethostbyname((string) gethostname()),
-        ];
-
-        foreach ($candidates as $candidate) {
-            $ip = $this->normalizeIp($candidate);
-            if ($ip !== null) {
-                return $ip;
-            }
-        }
-
-        return null;
-    }
-
-    private function normalizeIp(?string $ip): ?string
-    {
-        $ip = trim((string) $ip);
-        if ($ip === '') {
-            return null;
-        }
-
-        return filter_var($ip, FILTER_VALIDATE_IP) !== false ? $ip : null;
     }
 
     /**

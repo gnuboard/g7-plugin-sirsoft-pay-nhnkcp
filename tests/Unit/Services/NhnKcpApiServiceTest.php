@@ -4,8 +4,6 @@ namespace Plugins\Sirsoft\PayNhnkcp\Tests\Unit\Services;
 
 use App\Services\PluginSettingsService;
 use Illuminate\Support\Facades\Http;
-use Plugins\Sirsoft\PayNhnkcp\Exceptions\NhnKcpApiException;
-use Plugins\Sirsoft\PayNhnkcp\Services\KcpSoapService;
 use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
 use Plugins\Sirsoft\PayNhnkcp\Tests\PluginTestCase;
 
@@ -32,79 +30,11 @@ class NhnKcpApiServiceTest extends PluginTestCase
         return new NhnKcpApiService($settingsMock);
     }
 
-    /**
-     * KCP CLI 실행을 외부 의존 없이 검증하기 위한 임시 바이너리 디렉터리 생성.
-     *
-     * @return array{service: NhnKcpApiService, dir: string, log: string}
-     */
-    private function makeServiceWithStubbedCli(string $response, array $settingsOverrides = []): array
-    {
-        $service = $this->makeService($settingsOverrides);
-        $dir = sys_get_temp_dir() . '/nhnkcp_cli_' . uniqid('', true);
-        $this->assertTrue(mkdir($dir), '임시 CLI 디렉터리 생성 실패');
-
-        $logPath = $dir . '/argv.log';
-        $responsePath = $dir . '/response.txt';
-        file_put_contents($responsePath, $response);
-
-        $script = "#!/bin/sh\n"
-            . "printf '%s\\n' \"\$@\" > " . escapeshellarg($logPath) . "\n"
-            . 'cat ' . escapeshellarg($responsePath) . "\n";
-
-        foreach (['pp_cli', 'pp_cli_x64'] as $binName) {
-            $binPath = $dir . '/' . $binName;
-            file_put_contents($binPath, $script);
-            chmod($binPath, 0755);
-        }
-
-        $reflection = new \ReflectionClass($service);
-        $property = $reflection->getProperty('binDir');
-        $property->setAccessible(true);
-        $property->setValue($service, $dir);
-
-        return [
-            'service' => $service,
-            'dir' => $dir,
-            'log' => $logPath,
-        ];
-    }
-
-    private function removeStubbedCliDirectory(string $dir): void
-    {
-        foreach (glob($dir . '/*') ?: [] as $path) {
-            @unlink($path);
-        }
-
-        @rmdir($dir);
-    }
-
-    private function capturedCliArgs(string $logPath): string
-    {
-        $lines = file($logPath, FILE_IGNORE_NEW_LINES);
-        $this->assertIsArray($lines, 'CLI 인자 로그를 읽을 수 있어야 함');
-
-        return $lines[1] ?? '';
-    }
-
     public function test_get_site_cd_returns_test_site_cd_in_test_mode(): void
     {
         $service = $this->makeService();
 
         $this->assertEquals(self::TEST_SITE_CD, $service->getSiteCd());
-    }
-
-    public function test_kcp_soap_service_falls_back_to_test_site_cd_when_escrow_test_site_cd_is_empty(): void
-    {
-        $settingsMock = $this->createMock(PluginSettingsService::class);
-        $settingsMock->method('get')->willReturn([
-            'is_test_mode' => true,
-            'test_site_cd' => self::TEST_SITE_CD,
-            'escrow_test_site_cd' => '',
-        ]);
-
-        $service = new KcpSoapService($settingsMock);
-
-        $this->assertSame(self::TEST_SITE_CD, $service->getEscrowSiteCd());
     }
 
     public function test_get_site_cd_returns_live_site_cd_in_live_mode(): void
@@ -116,22 +46,6 @@ class NhnKcpApiServiceTest extends PluginTestCase
         ]);
 
         $this->assertEquals('SR123456', $service->getSiteCd());
-    }
-
-    public function test_use_stored_credentials_restores_payment_time_mode_and_site_cd(): void
-    {
-        $service = $this->makeService([
-            'is_test_mode' => true,
-            'test_site_cd' => 'T0000',
-            'live_site_cd' => 'SR999999',
-            'live_site_key' => 'live_key_value',
-        ]);
-
-        $service->useStoredCredentials(false, 'SR123456');
-
-        $this->assertEquals('SR123456', $service->getSiteCd());
-        $this->assertStringContainsString('pay.kcp.co.kr', $service->getJsUrl());
-        $this->assertStringNotContainsString('testpay', $service->getJsUrl());
     }
 
     public function test_get_js_url_returns_test_url_in_test_mode(): void
@@ -218,131 +132,83 @@ class NhnKcpApiServiceTest extends PluginTestCase
         $service->getTransaction('TNO_ERR', 'ORD-ERR');
     }
 
-    public function test_cancel_payment_calls_cli_with_full_cancel_params(): void
+    public function test_cancel_payment_calls_delete_with_correct_params(): void
     {
-        $stub = $this->makeServiceWithStubbedCli(
-            'res_cd=0000' . chr(31) . 'res_msg=취소완료' . chr(31) . 'tno=KCP_TNO_CANCEL_001'
-        );
-        /** @var NhnKcpApiService $service */
-        $service = $stub['service'];
+        $service = $this->makeService();
 
         $tno = 'KCP_TNO_CANCEL_001';
         $ordrIdxx = 'ORD-TEST-CANCEL';
         $cancelAmt = 50000;
         $cancelMsg = '고객 요청';
 
-        try {
-            $result = $service->cancelPayment($tno, $ordrIdxx, $cancelAmt, $cancelMsg, false);
+        Http::fake([
+            'stgapi.kcp.co.kr/*' => Http::response([
+                'res_cd' => '0000',
+                'res_msg' => '취소완료',
+                'tno' => $tno,
+            ], 200),
+        ]);
 
-            $this->assertEquals('0000', $result['res_cd']);
+        $result = $service->cancelPayment($tno, $ordrIdxx, $cancelAmt, $cancelMsg, false);
 
-            $args = $this->capturedCliArgs($stub['log']);
-            $this->assertStringContainsString('tx_cd=00200000', $args);
-            $this->assertStringContainsString('ordr_idxx=' . $ordrIdxx, $args);
-            $this->assertStringContainsString('modx_data=mod_data=tno=' . $tno, $args);
-            $this->assertStringContainsString('mod_type=STSC', $args);
-            $this->assertStringContainsString('mod_desc=' . $cancelMsg, $args);
-            $this->assertStringNotContainsString('mod_mny=', $args);
-            $this->assertStringNotContainsString('rem_mny=', $args);
-        } finally {
-            $this->removeStubbedCliDirectory($stub['dir']);
-        }
+        $this->assertEquals('0000', $result['res_cd']);
+
+        Http::assertSent(function ($request) use ($tno, $ordrIdxx, $cancelAmt, $cancelMsg) {
+            return str_contains($request->url(), 'stgapi.kcp.co.kr')
+                && str_contains($request->url(), urlencode($tno))
+                && $request->method() === 'DELETE'
+                && $request['tno'] === $tno
+                && $request['ordr_idxx'] === $ordrIdxx
+                && $request['mod_type'] === 'STAX'
+                && $request['mod_desc'] === $cancelMsg
+                && $request['cancel_amt'] === $cancelAmt;
+        });
     }
 
-    public function test_cancel_payment_calls_cli_with_partial_cancel_params(): void
+    public function test_cancel_payment_sends_part_mod_type_for_partial_cancel(): void
     {
-        $stub = $this->makeServiceWithStubbedCli('res_cd=0000' . chr(31) . 'res_msg=부분취소완료');
-        /** @var NhnKcpApiService $service */
-        $service = $stub['service'];
+        $service = $this->makeService();
 
-        try {
-            $service->cancelPayment('TNO_PART', 'ORD-PART', 10000, '부분취소', true, 50000);
+        Http::fake([
+            'stgapi.kcp.co.kr/*' => Http::response(['res_cd' => '0000'], 200),
+        ]);
 
-            $args = $this->capturedCliArgs($stub['log']);
-            $this->assertStringContainsString('mod_type=RN07', $args);
-            $this->assertStringContainsString('mod_mny=10000', $args);
-            $this->assertStringContainsString('rem_mny=40000', $args);
-        } finally {
-            $this->removeStubbedCliDirectory($stub['dir']);
-        }
-    }
+        $service->cancelPayment('TNO_PART', 'ORD-PART', 10000, '부분취소', true);
 
-    public function test_register_escrow_delivery_uses_test_site_cd_when_escrow_test_site_cd_is_empty(): void
-    {
-        $stub = $this->makeServiceWithStubbedCli(
-            'res_cd=0000' . chr(31) . 'res_msg=배송등록완료',
-            ['escrow_test_site_cd' => '']
-        );
-        /** @var NhnKcpApiService $service */
-        $service = $stub['service'];
-
-        try {
-            $service->registerEscrowDelivery('TNO_ESCROW', 'ORD-ESCROW', '1234567890', '04');
-
-            $args = $this->capturedCliArgs($stub['log']);
-            $this->assertStringContainsString('site_cd=' . self::TEST_SITE_CD, $args);
-        } finally {
-            $this->removeStubbedCliDirectory($stub['dir']);
-        }
+        Http::assertSent(function ($request) {
+            return $request['mod_type'] === 'PART';
+        });
     }
 
     public function test_cancel_payment_throws_on_non_0000_res_cd(): void
     {
-        $stub = $this->makeServiceWithStubbedCli('res_cd=9999' . chr(31) . 'res_msg=취소 실패');
-        /** @var NhnKcpApiService $service */
-        $service = $stub['service'];
+        $service = $this->makeService();
 
-        try {
-            $this->expectException(NhnKcpApiException::class);
-            $this->expectExceptionMessage('취소 실패');
+        Http::fake([
+            'stgapi.kcp.co.kr/*' => Http::response([
+                'res_cd' => '9999',
+                'res_msg' => '취소 실패',
+            ], 200),
+        ]);
 
-            $service->cancelPayment('TNO_FAIL', 'ORD-FAIL', 50000, '고객 요청');
-        } finally {
-            $this->removeStubbedCliDirectory($stub['dir']);
-        }
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('취소 실패');
+
+        $service->cancelPayment('TNO_FAIL', 'ORD-FAIL', 50000, '고객 요청');
     }
 
-    public function test_cancel_payment_throws_on_cli_fallback_error(): void
+    public function test_cancel_payment_throws_on_http_error(): void
     {
-        $stub = $this->makeServiceWithStubbedCli('');
-        /** @var NhnKcpApiService $service */
-        $service = $stub['service'];
+        $service = $this->makeService();
 
-        try {
-            $this->expectException(NhnKcpApiException::class);
-            $this->expectExceptionMessage('연동 모듈 호출 오류');
+        Http::fake([
+            'stgapi.kcp.co.kr/*' => Http::response(null, 500),
+        ]);
 
-            $service->cancelPayment('TNO_CLI_ERR', 'ORD-CLI-ERR', 50000, '오류');
-        } finally {
-            $this->removeStubbedCliDirectory($stub['dir']);
-        }
-    }
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessageMatches('/HTTP 500/');
 
-    public function test_cli_debug_logs_do_not_include_raw_response_or_site_key(): void
-    {
-        $source = file_get_contents((new \ReflectionClass(NhnKcpApiService::class))->getFileName());
-        $this->assertIsString($source);
-
-        $this->assertStringNotContainsString("'res_data' =>", $source);
-        $this->assertStringNotContainsString("'output_lines' =>", $source);
-        $this->assertStringNotContainsString("['command' => \$command]", $source);
-        $this->assertStringContainsString("'res_cd' => \$result['res_cd'] ?? null", $source);
-    }
-
-    public function test_cancel_payment_rejects_unsafe_cancel_message_before_cli_exec(): void
-    {
-        $stub = $this->makeServiceWithStubbedCli('res_cd=0000');
-        /** @var NhnKcpApiService $service */
-        $service = $stub['service'];
-
-        try {
-            $this->expectException(NhnKcpApiException::class);
-            $this->expectExceptionMessageMatches('/control character/');
-
-            $service->cancelPayment('TNO_UNSAFE', 'ORD-UNSAFE', 50000, "고객 요청\nINJECT");
-        } finally {
-            $this->removeStubbedCliDirectory($stub['dir']);
-        }
+        $service->cancelPayment('TNO_HTTP_ERR', 'ORD-HTTP-ERR', 50000, '오류');
     }
 
     public function test_get_transaction_uses_live_api_url_in_live_mode(): void

@@ -7,7 +7,6 @@ namespace Plugins\Sirsoft\PayNhnkcp\Tests\Feature\Controllers;
 use App\Extension\HookListenerRegistrar;
 use App\Extension\HookManager;
 use App\Models\User;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Modules\Sirsoft\Ecommerce\Database\Factories\OrderPaymentFactory;
 use Modules\Sirsoft\Ecommerce\Enums\CouponIssueRecordStatus;
@@ -391,59 +390,6 @@ class ShippingAndCouponCancellationTest extends PluginTestCase
                 'reason'    => 'changed_mind',
                 'cancel_pg' => true,
             ])->assertOk()->assertJsonPath('success', true);
-    }
-
-    public function test_cancel_restores_payment_time_credentials_before_kcp_refund(): void
-    {
-        $mock = $this->createMock(NhnKcpApiService::class);
-        $mock->expects($this->once())
-            ->method('useStoredCredentials')
-            ->with(false, 'SR123456');
-        $mock->expects($this->once())
-            ->method('cancelPayment')
-            ->willReturn(self::CANCEL_SUCCESS);
-        $this->app->instance(NhnKcpApiService::class, $mock);
-
-        $data = $this->createKcpOrderWithShipping(optionCount: 1, unitPrice: 20000, shippingFee: 3000);
-        $order = $data['order'];
-        $payment = $data['payment'];
-        $payment->update([
-            'payment_meta' => [
-                'is_test_mode' => false,
-                'site_cd' => 'SR123456',
-            ],
-        ]);
-
-        $this->actingAs($this->adminUser)
-            ->postJson("/api/modules/sirsoft-ecommerce/admin/orders/{$order->order_number}/cancel", [
-                'type'      => 'full',
-                'reason'    => 'changed_mind',
-                'cancel_pg' => true,
-            ])->assertOk()->assertJsonPath('success', true);
-    }
-
-    public function test_refund_returns_i18n_error_when_same_payment_is_already_refunding(): void
-    {
-        $data = $this->createKcpOrderWithShipping(optionCount: 1, unitPrice: 20000, shippingFee: 3000);
-        $order = $data['order'];
-        $payment = $data['payment'];
-        $lock = Cache::lock('nhnkcp:refund:' . $payment->id, 30);
-        $this->assertTrue($lock->get(), 'precondition: refund lock should be acquired');
-
-        try {
-            $listener = new PaymentRefundListener();
-
-            $result = $listener->processRefund([], $order, $payment, 23000, '동시 환불 테스트');
-
-            $this->assertFalse($result['success']);
-            $this->assertSame('REFUND_IN_PROGRESS', $result['error_code']);
-            $this->assertSame(
-                __('sirsoft-pay_nhnkcp::messages.refund.in_progress'),
-                $result['error_message']
-            );
-        } finally {
-            $lock->release();
-        }
     }
 
     public function test_full_cancel_free_shipping_refunds_only_product_amount(): void

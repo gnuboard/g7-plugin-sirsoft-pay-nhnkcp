@@ -7,7 +7,6 @@ namespace Plugins\Sirsoft\PayNhnkcp\Services;
 use App\Extension\HookManager;
 use App\Services\PluginSettingsService;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Http;
 use Plugins\Sirsoft\PayNhnkcp\Exceptions\NhnKcpApiException;
 
 class NhnKcpApiService
@@ -27,10 +26,6 @@ class NhnKcpApiService
     private const JS_URL_TEST = 'https://testpay.kcp.co.kr/plugin/payplus_web.jsp';
 
     private const JS_URL_LIVE = 'https://pay.kcp.co.kr/plugin/payplus_web.jsp';
-
-    private const API_URL_TEST = 'https://stgapi.kcp.co.kr';
-
-    private const API_URL_LIVE = 'https://api.kcp.co.kr';
 
     private const LIVE_SITE_CD_PREFIX = 'SR';
 
@@ -67,12 +62,19 @@ class NhnKcpApiService
 
     private string $binDir;
 
-    public function __construct(
-        private readonly PluginSettingsService $pluginSettingsService,
-    )
+    public function __construct(PluginSettingsService $pluginSettingsService)
     {
-        $settings = $this->pluginSettingsService->get(self::PLUGIN_IDENTIFIER) ?? [];
-        $this->applyCredentials($settings, (bool) ($settings['is_test_mode'] ?? true));
+        $settings = $pluginSettingsService->get(self::PLUGIN_IDENTIFIER) ?? [];
+        $this->isTest = $settings['is_test_mode'] ?? true;
+        $this->siteCd = $this->isTest
+            ? ($settings['test_site_cd'] ?? 'T0000')
+            : $this->buildLiveSiteCd($settings['live_site_cd'] ?? '');
+        $this->escrowSiteCd = $this->isTest
+            ? ($settings['escrow_test_site_cd'] ?? 'T0007')
+            : $this->siteCd;
+        $this->siteKey = $this->isTest
+            ? ($settings['test_site_key'] ?? '')
+            : ($settings['live_site_key'] ?? '');
         $this->binDir = dirname(__DIR__, 2) . '/bin';
     }
 
@@ -87,31 +89,6 @@ class NhnKcpApiService
     }
 
     /**
-     * 현재 서비스 인스턴스가 테스트 모드인지 반환한다.
-     *
-     * @return bool 테스트 모드 여부
-     */
-    public function isTestMode(): bool
-    {
-        return $this->isTest;
-    }
-
-    /**
-     * 결제 당시 저장된 KCP 상점 코드/모드를 환불·조회 호출 전에 복원한다.
-     *
-     * 사이트 키는 DB 결제 메타에 저장하지 않고 현재 플러그인 설정의 해당 모드 키를 사용한다.
-     *
-     * @param  bool  $isTestMode  결제 당시 테스트 모드 여부
-     * @param  string  $siteCd  결제 당시 KCP site_cd
-     * @return void
-     */
-    public function useStoredCredentials(bool $isTestMode, string $siteCd): void
-    {
-        $settings = $this->pluginSettingsService->get(self::PLUGIN_IDENTIFIER) ?? [];
-        $this->applyCredentials($settings, $isTestMode, $siteCd);
-    }
-
-    /**
      * Standard Pay JS SDK URL 반환 (테스트/라이브 자동 분기)
      *
      * @return string SDK URL
@@ -119,51 +96,6 @@ class NhnKcpApiService
     public function getJsUrl(): string
     {
         return $this->isTest ? self::JS_URL_TEST : self::JS_URL_LIVE;
-    }
-
-    /**
-     * KCP 거래 조회 (HTTP API 방식)
-     *
-     * 결제 승인/취소 hot path 는 KCP CLI 를 사용하지만, 거래 상태 조회처럼
-     * 부수효과가 없는 요청은 HTTP API 로 제공한다.
-     *
-     * @param string $tno      KCP 거래번호
-     * @param string $ordrIdxx 주문번호
-     * @return array KCP 거래 조회 응답
-     */
-    public function getTransaction(string $tno, string $ordrIdxx): array
-    {
-        $this->assertSafeCliValue($tno, 'tno');
-        $this->assertSafeCliValue($ordrIdxx, 'ordr_idxx');
-
-        $timestamp = now()->format('YmdHis');
-        $signature = hash_hmac(
-            'sha256',
-            implode('|', [$this->siteCd, $tno, $ordrIdxx, $timestamp]),
-            $this->siteKey
-        );
-
-        $url = $this->apiBaseUrl() . '/v1/payment/trade/' . rawurlencode($tno);
-
-        $response = Http::withBasicAuth($this->siteCd, $this->siteKey)
-            ->withHeaders([
-                'X-Kcp-Site-Code' => $this->siteCd,
-                'X-Kcp-Timestamp' => $timestamp,
-                'X-Kcp-Signature' => $signature,
-            ])
-            ->asJson()
-            ->post($url, [
-                'tno' => $tno,
-                'ordr_idxx' => $ordrIdxx,
-            ]);
-
-        if ($response->failed()) {
-            throw new NhnKcpApiException('KCP transaction query HTTP ' . $response->status());
-        }
-
-        $json = $response->json();
-
-        return is_array($json) ? $json : [];
     }
 
     /**
@@ -210,19 +142,15 @@ class NhnKcpApiService
     ): array {
         $modType = $isPartial ? 'RN07' : 'STSC';
 
-        $fields = [
-            'tno' => $tno,
-            'mod_type' => $modType,
-            'mod_desc' => $cancelMsg,
-        ];
+        $modxData = 'tno=' . $tno . chr(31)
+            . 'mod_type=' . $modType . chr(31)
+            . 'mod_desc=' . $cancelMsg . chr(31);
 
         if ($isPartial && $totalAmt > 0) {
             $remMny = $totalAmt - $cancelAmt;
-            $fields['rem_mny'] = (string) $remMny;
-            $fields['mod_mny'] = (string) $cancelAmt;
+            $modxData .= 'rem_mny=' . $remMny . chr(31)
+                . 'mod_mny=' . $cancelAmt . chr(31);
         }
-
-        $modxData = $this->buildModData($fields);
 
         // 훅: 결제 취소 전 (본인인증 등 확장 지점)
         HookManager::doAction('sirsoft-pay_nhnkcp.payment.before_cancel', $tno, $ordrIdxx, $cancelAmt, $cancelMsg);
@@ -255,7 +183,7 @@ class NhnKcpApiService
      * KCP 에스크로 배송 등록 (CLI 방식, mod_type=STE1)
      *
      * 에스크로 결제 후 상품을 발송할 때 KCP에 운송장번호를 등록합니다.
-     * 에스크로 테스트 결제는 별도 설정값이 있으면 그 site_cd를, 없으면 일반 테스트 site_cd를 사용합니다.
+     * 에스크로 테스트 결제는 T0007 site_cd를 사용하므로 escrowSiteCd로 호출합니다.
      *
      * @param  string  $tno       KCP 에스크로 거래번호
      * @param  string  $ordrIdxx  주문번호
@@ -269,12 +197,10 @@ class NhnKcpApiService
         string $deliNumb,
         string $deliCorp,
     ): array {
-        $modxData = $this->buildModData([
-            'tno' => $tno,
-            'mod_type' => 'STE1',
-            'deli_numb' => $deliNumb,
-            'deli_corp' => $deliCorp,
-        ]);
+        $modxData = 'tno=' . $tno . chr(31)
+            . 'mod_type=STE1' . chr(31)
+            . 'deli_numb=' . $deliNumb . chr(31)
+            . 'deli_corp=' . $deliCorp . chr(31);
 
         $result = $this->executeCli(
             txCd: self::TX_CANCEL,
@@ -316,6 +242,12 @@ class NhnKcpApiService
             $resData = $this->executeCliLinux($txCd, $ordrIdxx, $encData, $encInfo, $custIp, $paUrl, $modxData, $siteCd);
         }
 
+        Log::debug('KCP CLI response', [
+            'tx_cd' => $txCd,
+            'ordr_idxx' => $ordrIdxx,
+            'res_data' => $resData,
+        ]);
+
         if ($resData === '') {
             $resData = 'res_cd=9502' . chr(31) . 'res_msg=연동 모듈 호출 오류';
         }
@@ -329,12 +261,6 @@ class NhnKcpApiService
         }
 
         parse_str(str_replace(chr(31), '&', $resData), $result);
-
-        Log::debug('KCP CLI response parsed', [
-            'tx_cd' => $txCd,
-            'ordr_idxx' => $ordrIdxx,
-            'res_cd' => $result['res_cd'] ?? null,
-        ]);
 
         return $result;
     }
@@ -371,7 +297,7 @@ class NhnKcpApiService
         $this->assertSafeCliValue($encInfo, 'enc_info');
         $this->assertSafeCliValue($custIp, 'cust_ip');
         $this->assertSafeCliValue($keyPath, 'key_path');
-        $this->assertSafeCliValue($planData, 'plan_data', allowKcpFieldSeparator: true);
+        $this->assertSafeCliValue($planData, 'plan_data');
 
         $args = 'site_cd=' . $siteCd . ','
             . 'site_key=' . $this->siteKey . ','
@@ -391,18 +317,13 @@ class NhnKcpApiService
         // escapeshellarg 로 binPath / args 각각을 안전하게 quoting (Windows 는 `"` 제거 + 큰따옴표 래핑).
         $command = escapeshellarg($binPath) . ' ' . escapeshellarg($args);
 
-        Log::debug('KCP CLI command prepared (Windows)', [
-            'bin' => basename($binPath),
-            'tx_cd' => $txCd,
-            'ordr_idxx' => $ordrIdxx,
-            'site_cd' => $siteCd,
-        ]);
+        Log::debug('KCP CLI command (Windows)', ['command' => $command]);
 
         exec($command, $output, $returnCode);
 
         Log::debug('KCP CLI exec result', [
             'return_code' => $returnCode,
-            'output_count' => count($output),
+            'output_lines' => $output,
         ]);
 
         // Windows 코드페이지 변경 메시지('Active code page: ...') 등 비-KCP 라인 제거
@@ -447,7 +368,7 @@ class NhnKcpApiService
         $this->assertSafeCliValue($encData, 'enc_data');
         $this->assertSafeCliValue($encInfo, 'enc_info');
         $this->assertSafeCliValue($custIp, 'cust_ip');
-        $this->assertSafeCliValue($modxArg, 'modx_data', allowKcpFieldSeparator: true);
+        $this->assertSafeCliValue($modxArg, 'modx_data');
 
         $args = 'home=' . $this->binDir . ','
             . 'site_cd=' . $siteCd . ','
@@ -490,9 +411,7 @@ class NhnKcpApiService
     private function ensureCliExecutable(string $binPath): void
     {
         if (! is_file($binPath)) {
-            throw new NhnKcpApiException(__('sirsoft-pay_nhnkcp::messages.errors.cli_binary_missing', [
-                'path' => $binPath,
-            ]));
+            throw new NhnKcpApiException("KCP CLI 바이너리 누락: {$binPath}");
         }
 
         clearstatcache(true, $binPath);
@@ -522,7 +441,7 @@ class NhnKcpApiService
         ]);
 
         throw new NhnKcpApiException(
-            __('sirsoft-pay_nhnkcp::messages.errors.cli_binary_not_executable', ['path' => $binPath])
+            "KCP CLI 바이너리 실행 권한 부족 — 운영자 조치 필요 (sudo chmod 755 {$binPath})"
         );
     }
 
@@ -540,9 +459,9 @@ class NhnKcpApiService
      * @param  string  $value  검증할 값
      * @param  string  $key  필드 이름 (예외 메시지용)
      *
-     * @throws NhnKcpApiException 위험 문자 발견 시
+     * @throws KgInicisApiException 위험 문자 발견 시
      */
-    private function assertSafeCliValue(string $value, string $key, bool $allowKcpFieldSeparator = false): void
+    private function assertSafeCliValue(string $value, string $key): void
     {
         // 큰따옴표 / 백틱 — 명시적 위험
         if (preg_match('/["`]/', $value) === 1) {
@@ -551,64 +470,12 @@ class NhnKcpApiService
             );
         }
 
-        // 제어문자 (NUL / LF / CR / TAB 등 0x00-0x1F + 0x7F).
-        // KCP CLI mod_data 자체에는 필드 구분자 chr(31)가 필요하므로 내부에서
-        // buildModData()로 개별 값 검증을 마친 조립 문자열에 한해 chr(31)만 허용한다.
-        $controlPattern = $allowKcpFieldSeparator ? '/[\x00-\x1E\x7F]/' : '/[\x00-\x1F\x7F]/';
-        if (preg_match($controlPattern, $value) === 1) {
+        // 제어문자 (NUL / LF / CR / TAB 등 0x00-0x1F + 0x7F)
+        if (preg_match('/[\x00-\x1F\x7F]/', $value) === 1) {
             throw new NhnKcpApiException(
                 "KCP CLI rejected unsafe value for {$key} (contains control character)."
             );
         }
-    }
-
-    /**
-     * KCP CLI mod_data 문자열을 안전하게 조립한다.
-     *
-     * 개별 value 에 KCP 필드 구분자(chr(31))나 쉘 인자 위험 문자가 들어가면 먼저
-     * 거부한 뒤, 내부 구분자만 포함한 mod_data 를 만든다.
-     *
-     * @param array<string, string|int> $fields
-     */
-    private function buildModData(array $fields): string
-    {
-        $parts = [];
-
-        foreach ($fields as $key => $value) {
-            $value = (string) $value;
-            $this->assertSafeCliValue($key, 'mod_data_key');
-            $this->assertSafeCliValue($value, $key);
-            $parts[] = $key . '=' . $value;
-        }
-
-        return implode(chr(31), $parts) . chr(31);
-    }
-
-    private function apiBaseUrl(): string
-    {
-        return $this->isTest ? self::API_URL_TEST : self::API_URL_LIVE;
-    }
-
-    /**
-     * 플러그인 설정과 선택 모드 기준으로 KCP 인증 정보를 적용한다.
-     */
-    private function applyCredentials(array $settings, bool $isTestMode, string $siteCdOverride = ''): void
-    {
-        $this->isTest = $isTestMode;
-
-        if ($this->isTest) {
-            $this->siteCd = $siteCdOverride !== '' ? $siteCdOverride : ($settings['test_site_cd'] ?? 'T0000');
-            $escrowTestSiteCd = trim((string) ($settings['escrow_test_site_cd'] ?? ''));
-            $this->escrowSiteCd = $escrowTestSiteCd !== '' ? $escrowTestSiteCd : $this->siteCd;
-            $this->siteKey = $settings['test_site_key'] ?? '';
-
-            return;
-        }
-
-        $liveSiteCd = $siteCdOverride !== '' ? $siteCdOverride : ($settings['live_site_cd'] ?? '');
-        $this->siteCd = $this->buildLiveSiteCd($liveSiteCd);
-        $this->escrowSiteCd = $this->siteCd;
-        $this->siteKey = $settings['live_site_key'] ?? '';
     }
 
     private function buildLiveSiteCd(string $suffix): string

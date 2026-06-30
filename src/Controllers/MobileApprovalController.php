@@ -6,9 +6,7 @@ namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Modules\Sirsoft\Ecommerce\Models\Order;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
-use Plugins\Sirsoft\PayNhnkcp\Concerns\RecordsPaymentWindowClosure;
 use Plugins\Sirsoft\PayNhnkcp\Exceptions\NhnKcpApiException;
 use Plugins\Sirsoft\PayNhnkcp\Services\KcpSoapService;
 
@@ -20,8 +18,6 @@ use Plugins\Sirsoft\PayNhnkcp\Services\KcpSoapService;
  */
 class MobileApprovalController
 {
-    use RecordsPaymentWindowClosure;
-
     /** 결제수단 → KCP 모바일 pay_method 코드 */
     private const MOBILE_PAY_METHOD_MAP = [
         'card' => 'CARD',
@@ -91,7 +87,6 @@ class MobileApprovalController
             'buyr_mail' => ['nullable', 'string', 'email', 'max:100'],
             'buyr_tel1' => ['nullable', 'string', 'max:20'],
             'ret_url' => ['required', 'string', 'url'],
-            'currency' => ['nullable', 'string', 'size:3'],
         ]);
 
         $payMethodKey = strtolower($validated['pay_method']);
@@ -104,46 +99,6 @@ class MobileApprovalController
         $useEscrow = (bool) ($settings['use_escrow'] ?? false) && ! $isEasyPay;
 
         try {
-            $order = $this->orderService->findByOrderNumber($validated['order_number']);
-            if (! $order) {
-                return response()->json([
-                    'success' => false,
-                    'error' => 'Order not found.',
-                ], 404);
-            }
-
-            if ((int) $order->user_id !== (int) ($request->user()?->id ?? 0)) {
-                return response()->json([
-                    'success' => false,
-                    'error' => 'You cannot request a NHN KCP approval key for this order.',
-                ], 403);
-            }
-
-            $expectedAmount = $this->expectedPaymentPrice($order);
-            if ((int) $validated['amount'] !== $expectedAmount) {
-                return response()->json([
-                    'success' => false,
-                    'error' => 'Payment amount does not match the order amount.',
-                ], 422);
-            }
-
-            if (! $this->isKrwPayment($order, $validated['currency'] ?? null)) {
-                return response()->json([
-                    'success' => false,
-                    'error' => 'NHN KCP supports KRW payments only.',
-                ], 422);
-            }
-
-            if (! $order->order_status->isBeforePayment()) {
-                $restored = $this->restoreRetryableKcpOrder($order, (int) $validated['amount']);
-                if (! $restored) {
-                    return response()->json([
-                        'success' => false,
-                        'error' => 'Order is not retryable for NHN KCP payment.',
-                    ], 409);
-                }
-            }
-
             $result = $this->soapService->getApprovalKey(
                 orderNumber: $validated['order_number'],
                 goodName: $validated['good_name'],
@@ -174,7 +129,7 @@ class MobileApprovalController
                 'quotaopt' => '12',
                 'currency' => '410',
                 'approval_key' => $result['approval_key'],
-                ...$this->buildTaxFields($order, (int) $validated['amount']),
+                ...$this->buildTaxFields($validated['order_number']),
             ];
 
             // 가상계좌 전용 파라미터
@@ -216,24 +171,21 @@ class MobileApprovalController
      *
      * @return array<string, string>
      */
-    private function buildTaxFields(Order $order, int $paymentAmount): array
+    private function buildTaxFields(string $orderNumber): array
     {
+        $order = $this->orderService->findByOrderNumber($orderNumber);
+        if (! $order) {
+            return [];
+        }
+
         $taxFreeAmt = (int) round((float) ($order->total_tax_free_amount ?? 0));
         if ($taxFreeAmt <= 0) {
             return [];
         }
 
-        $paymentAmount = max(0, $paymentAmount);
-        $taxFreeAmt = min($taxFreeAmt, $paymentAmount);
-        $taxablePaymentAmt = max(0, $paymentAmount - $taxFreeAmt);
         $taxTotalAmt = (int) round((float) ($order->total_tax_amount ?? 0));
         $vatAmt = (int) round((float) ($order->total_vat_amount ?? 0));
-        if ($taxablePaymentAmt > 0 && $taxTotalAmt > 0 && $vatAmt > 0) {
-            $vatAmt = min($taxablePaymentAmt, (int) round($taxablePaymentAmt * ($vatAmt / $taxTotalAmt)));
-        } else {
-            $vatAmt = 0;
-        }
-        $supplyAmt = $taxablePaymentAmt - $vatAmt; // 공급가액 (VAT 제외)
+        $supplyAmt = $taxTotalAmt - $vatAmt; // 공급가액 (VAT 제외)
 
         return [
             'tax_flag'      => 'TG03',
@@ -241,18 +193,5 @@ class MobileApprovalController
             'comm_vat_mny'  => (string) $vatAmt,
             'comm_free_mny' => (string) $taxFreeAmt,
         ];
-    }
-
-    private function isKrwPayment(Order $order, ?string $requestedCurrency): bool
-    {
-        return $this->normalizeCurrency($requestedCurrency) === 'KRW'
-            && $this->normalizeCurrency((string) ($order->currency ?? 'KRW')) === 'KRW';
-    }
-
-    private function normalizeCurrency(?string $currency): string
-    {
-        $normalized = strtoupper(trim((string) $currency));
-
-        return $normalized !== '' ? $normalized : 'KRW';
     }
 }

@@ -7,7 +7,6 @@ namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
 use App\Extension\HookManager;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
-use Modules\Sirsoft\Ecommerce\Models\Order;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\SendsKcpNotifyResponse;
 use Plugins\Sirsoft\PayNhnkcp\Http\Requests\EscrowCommonNotifyRequest;
@@ -67,30 +66,6 @@ class EscrowCommonNotifyController
                 return $this->kcpNotifyResponse();
             }
 
-            $contextError = $this->validateEscrowNotifyContext($order, $validated, $tno);
-            if ($contextError !== null) {
-                Log::warning('KCP: escrow common notify context mismatch — retry requested', [
-                    'reason' => $contextError,
-                    'tx_cd' => $txCd,
-                    'tno' => $tno,
-                    'order_no' => $orderNo,
-                ]);
-
-                return $this->kcpNotifyRetry();
-            }
-
-            $fingerprint = $this->escrowNotifyFingerprint($validated);
-            if ($this->wasEscrowNotifyAlreadyProcessed($order, $fingerprint)) {
-                Log::info('KCP: escrow common notify replay ignored', [
-                    'tx_cd' => $txCd,
-                    'tno' => $tno,
-                    'order_no' => $orderNo,
-                    'cl_status' => $clStatus,
-                ]);
-
-                return $this->kcpNotifyResponse();
-            }
-
             match ($txCd) {
                 'TX02' => match ($clStatus) {
                     '2'  => HookManager::doAction('sirsoft-pay_nhnkcp.escrow.purchase_confirmed', $order, $validated),
@@ -101,8 +76,6 @@ class EscrowCommonNotifyController
                 'TX03' => HookManager::doAction('sirsoft-pay_nhnkcp.escrow.delivery_started', $order, $validated),
                 default => Log::info('KCP: escrow common notify - unhandled tx_cd', ['tx_cd' => $txCd, 'order_no' => $orderNo]),
             };
-
-            $this->recordEscrowNotifyProcessed($order, $fingerprint);
 
             Log::info('KCP: escrow common notify processed', [
                 'tx_cd'    => $txCd,
@@ -122,90 +95,5 @@ class EscrowCommonNotifyController
         }
 
         return $this->kcpNotifyResponse();
-    }
-
-    /**
-     * 에스크로 공통통보가 실제 결제 건과 같은 거래인지 확인한다.
-     *
-     * 현재 이 컨트롤러는 hook dispatch 만 하지만, 향후 listener 가 주문 상태를 바꿀 수 있으므로
-     * 주문번호 단독 신뢰를 피하고 저장된 tno/site_cd/escrow 플래그를 먼저 확인한다.
-     */
-    private function validateEscrowNotifyContext(Order $order, array $validated, string $tno): ?string
-    {
-        $payment = $order->payment;
-        if (! $payment) {
-            return 'payment_not_found';
-        }
-
-        if ($payment->pg_provider !== 'nhnkcp') {
-            return 'pg_provider_mismatch';
-        }
-
-        if (! (bool) $payment->is_escrow) {
-            return 'not_escrow_payment';
-        }
-
-        $storedTno = trim((string) ($payment->transaction_id ?? ''));
-        if ($storedTno === '' || $tno === '' || ! hash_equals($storedTno, $tno)) {
-            return 'tno_mismatch';
-        }
-
-        $meta = $payment->payment_meta ?? [];
-        $storedSiteCd = trim((string) ($meta['site_cd'] ?? ''));
-        $receivedSiteCd = trim((string) ($validated['site_cd'] ?? ''));
-        if ($storedSiteCd !== '' && $receivedSiteCd !== '' && ! hash_equals($storedSiteCd, $receivedSiteCd)) {
-            return 'site_cd_mismatch';
-        }
-
-        return null;
-    }
-
-    private function escrowNotifyFingerprint(array $validated): string
-    {
-        $keys = [
-            'site_cd',
-            'tno',
-            'order_no',
-            'tx_cd',
-            'tx_tm',
-            'cl_status',
-            'st_cd',
-            'can_msg',
-            'waybill_no',
-            'waybill_corp',
-        ];
-
-        $payload = [];
-        foreach ($keys as $key) {
-            $payload[$key] = (string) ($validated[$key] ?? '');
-        }
-
-        return hash('sha256', json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-    }
-
-    private function wasEscrowNotifyAlreadyProcessed(Order $order, string $fingerprint): bool
-    {
-        $payment = $order->payment;
-        $meta = $payment?->payment_meta ?? [];
-        $processed = $meta['escrow_common_notify_fingerprints'] ?? [];
-        $processed = is_array($processed) ? $processed : [];
-
-        return in_array($fingerprint, $processed, true);
-    }
-
-    private function recordEscrowNotifyProcessed(Order $order, string $fingerprint): void
-    {
-        $payment = $order->payment;
-        if (! $payment) {
-            return;
-        }
-
-        $meta = $payment->payment_meta ?? [];
-        $processed = $meta['escrow_common_notify_fingerprints'] ?? [];
-        $processed = is_array($processed) ? $processed : [];
-        $processed[] = $fingerprint;
-        $meta['escrow_common_notify_fingerprints'] = array_values(array_unique(array_slice($processed, -20)));
-
-        $payment->update(['payment_meta' => $meta]);
     }
 }

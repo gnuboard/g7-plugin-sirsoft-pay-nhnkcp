@@ -61,14 +61,6 @@ class MobileApprovalControllerTest extends PluginTestCase
             'pay_url'      => self::TEST_PAY_URL,
         ]);
         $mock->method('getSiteCd')->willReturn('T0000');
-        $mock->method('getEscrowSiteCd')->willReturn('T0000');
-        $this->app->instance(KcpSoapService::class, $mock);
-    }
-
-    private function expectSoapServiceNotCalled(): void
-    {
-        $mock = $this->createMock(KcpSoapService::class);
-        $mock->expects($this->never())->method('getApprovalKey');
         $this->app->instance(KcpSoapService::class, $mock);
     }
 
@@ -117,50 +109,6 @@ class MobileApprovalControllerTest extends PluginTestCase
             ->assertJsonPath('data.fields.good_mny', (string) (int) $order->total_due_amount);
     }
 
-    public function test_get_approval_key_restores_retryable_cancelled_order(): void
-    {
-        $order = $this->createOrder(10000);
-        $order->update([
-            'order_status' => OrderStatusEnum::CANCELLED,
-            'order_meta' => [
-                'payment_failure_code' => 'USER_CANCEL',
-                'payment_failure_message' => '사용자 취소',
-                'payment_failed_at' => now()->subMinute()->toIso8601String(),
-            ],
-        ]);
-        $order->payment->update([
-            'payment_status' => PaymentStatusEnum::CANCELLED,
-            'cancelled_at' => now()->subMinute(),
-            'paid_at' => null,
-            'transaction_id' => null,
-            'card_approval_number' => null,
-            'payment_meta' => [
-                'failure_source' => 'nhnkcp',
-                'failure_code' => 'USER_CANCEL',
-                'failure_message' => '사용자 취소',
-                'failure_stage' => 'window_closed',
-                'failed_at' => now()->subMinute()->toIso8601String(),
-            ],
-        ]);
-
-        $this->mockSoapService('APPROVAL_RETRY');
-        $this->mockPluginSettings();
-
-        $response = $this->actingAs($order->user)
-            ->postJson(self::APPROVAL_KEY_ENDPOINT, $this->approvalKeyPayload($order));
-
-        $response->assertOk()
-            ->assertJsonPath('data.fields.approval_key', 'APPROVAL_RETRY');
-
-        $order->refresh();
-        $payment = $order->payment;
-        $payment->refresh();
-
-        $this->assertEquals(OrderStatusEnum::PENDING_ORDER, $order->order_status);
-        $this->assertEquals(PaymentStatusEnum::READY, $payment->payment_status);
-        $this->assertNull($payment->cancelled_at);
-    }
-
     public function test_get_approval_key_returns_422_on_soap_failure(): void
     {
         $order = $this->createOrder(10000);
@@ -188,48 +136,6 @@ class MobileApprovalControllerTest extends PluginTestCase
         $response = $this->postJson(self::APPROVAL_KEY_ENDPOINT, $this->approvalKeyPayload($order));
 
         $response->assertUnauthorized();
-    }
-
-    public function test_get_approval_key_rejects_other_users_order(): void
-    {
-        $order = $this->createOrder(10000);
-        $otherUser = User::factory()->create();
-        $this->expectSoapServiceNotCalled();
-        $this->mockPluginSettings();
-
-        $response = $this->actingAs($otherUser)
-            ->postJson(self::APPROVAL_KEY_ENDPOINT, $this->approvalKeyPayload($order));
-
-        $response->assertForbidden()
-            ->assertJsonPath('success', false);
-    }
-
-    public function test_get_approval_key_rejects_amount_mismatch(): void
-    {
-        $order = $this->createOrder(10000);
-        $this->expectSoapServiceNotCalled();
-        $this->mockPluginSettings();
-
-        $response = $this->actingAs($order->user)
-            ->postJson(self::APPROVAL_KEY_ENDPOINT, $this->approvalKeyPayload($order, ['amount' => 9900]));
-
-        $response->assertUnprocessable()
-            ->assertJsonPath('success', false);
-    }
-
-    public function test_get_approval_key_rejects_non_krw_order(): void
-    {
-        $order = $this->createOrder(10000);
-        $order->currency = 'USD';
-        $order->save();
-        $this->expectSoapServiceNotCalled();
-        $this->mockPluginSettings();
-
-        $response = $this->actingAs($order->user)
-            ->postJson(self::APPROVAL_KEY_ENDPOINT, $this->approvalKeyPayload($order, ['currency' => 'USD']));
-
-        $response->assertUnprocessable()
-            ->assertJsonPath('success', false);
     }
 
     public function test_get_approval_key_validates_required_fields(): void
@@ -347,39 +253,11 @@ class MobileApprovalControllerTest extends PluginTestCase
         );
     }
 
-    public function test_mixed_tax_fields_are_rebalanced_to_payment_amount(): void
+    public function test_tax_fields_absent_when_order_not_found(): void
     {
-        // 원 상품 과세/비과세 합계 21,000원에서 쿠폰/마일리지 등으로 실결제액이 19,000원이 된 상황.
-        $taxable = 11000;
-        $taxFree = 10000;
-        $paymentAmount = 19000;
-        $vat = 1000;
-
-        $order = $this->createOrder($paymentAmount, ['taxable' => $taxable, 'vat' => $vat, 'taxFree' => $taxFree]);
-        $this->mockSoapService();
-        $this->mockPluginSettings();
-
-        $response = $this->actingAs($order->user)
-            ->postJson(self::APPROVAL_KEY_ENDPOINT, $this->approvalKeyPayload($order));
-
-        $response->assertOk();
-        $fields = $response->json('data.fields');
-
-        $this->assertEquals('TG03', $fields['tax_flag']);
-        $this->assertEquals('8182', $fields['comm_tax_mny']);
-        $this->assertEquals('818', $fields['comm_vat_mny']);
-        $this->assertEquals('10000', $fields['comm_free_mny']);
-        $this->assertSame(
-            (int) $fields['good_mny'],
-            (int) $fields['comm_tax_mny'] + (int) $fields['comm_vat_mny'] + (int) $fields['comm_free_mny'],
-            'KCP 복합과세 분할합은 good_mny와 반드시 일치해야 함'
-        );
-    }
-
-    public function test_get_approval_key_rejects_missing_order(): void
-    {
+        // 존재하지 않는 order_number로 요청 시 tax 분할 없이 정상 반환
         $order = $this->createOrder(10000);
-        $this->expectSoapServiceNotCalled();
+        $this->mockSoapService();
         $this->mockPluginSettings();
 
         $payload = $this->approvalKeyPayload($order, ['order_number' => 'NON-EXISTENT-ORDER']);
@@ -387,7 +265,9 @@ class MobileApprovalControllerTest extends PluginTestCase
         $response = $this->actingAs($order->user)
             ->postJson(self::APPROVAL_KEY_ENDPOINT, $payload);
 
-        $response->assertNotFound()
-            ->assertJsonPath('success', false);
+        $response->assertOk();
+        $fields = $response->json('data.fields');
+
+        $this->assertArrayNotHasKey('tax_flag', $fields, '주문 미조회 시 tax 필드 미포함');
     }
 }
