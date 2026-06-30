@@ -503,7 +503,10 @@ class ShippingAndCouponCancellationTest extends PluginTestCase
         $response->assertOk()->assertJsonPath('success', true);
 
         $order->refresh();
-        $this->assertEquals(OrderStatusEnum::PARTIAL_CANCELLED, $order->order_status);
+        // 부분취소는 별도 주문 상태(partial_cancelled)를 두지 않는다 — 주문 상태는 진행 상태(결제완료)를
+        // 유지하고, 취소된 옵션만 CANCELLED 로 전이된다(OrderStatusEnum::PARTIAL_CANCELLED 폐기).
+        $this->assertEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
+        $this->assertEquals(OrderStatusEnum::CANCELLED, $options[0]->refresh()->option_status);
 
         $refund = OrderRefund::where('order_id', $order->id)->first();
         $this->assertNotNull($refund, '부분취소 후 환불 레코드가 생성되어야 합니다');
@@ -622,7 +625,9 @@ class ShippingAndCouponCancellationTest extends PluginTestCase
 
         $response->assertOk()->assertJsonPath('success', true);
         $order->refresh();
-        $this->assertEquals(OrderStatusEnum::PARTIAL_CANCELLED, $order->order_status);
+        // 부분취소는 주문 상태(결제완료)를 유지하고 취소된 옵션만 CANCELLED 로 전이된다(PARTIAL_CANCELLED 폐기).
+        $this->assertEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
+        $this->assertEquals(OrderStatusEnum::CANCELLED, $options[0]->refresh()->option_status);
     }
 
     public function test_partial_cancel_rejected_when_coupon_condition_no_longer_met(): void
