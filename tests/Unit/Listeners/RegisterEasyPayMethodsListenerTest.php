@@ -92,9 +92,14 @@ class RegisterEasyPayMethodsListenerTest extends TestCase
 
         $naverpay = collect($methods)->firstWhere('id', 'nhnkcp_naverpay');
         $payco = collect($methods)->firstWhere('id', 'nhnkcp_payco');
+        $applepay = collect($methods)->firstWhere('id', 'nhnkcp_applepay');
 
-        $this->assertSame('네이버페이 (NHN KCP)', $naverpay['name']['ko'] ?? null);
-        $this->assertSame('PAYCO (NHN KCP)', $payco['name']['ko'] ?? null);
-        $this->assertSame('Pay with Naver Pay', $naverpay['description']['en'] ?? null);
+        $this->assertSame('네이버페이 (카드)', $naverpay['name']['ko'] ?? null);
+        $this->assertSame('PAYCO', $payco['name']['ko'] ?? null);
+        $this->assertSame('Pay by Naver Pay credit card (NHN KCP)', $naverpay['description']['en'] ?? null);
+        $this->assertSame(
+            '애플페이로 결제 (NHN KCP) · 애플페이는 IOS 기기에 모바일결제만 가능합니다.',
+            $applepay['description']['ko'] ?? null,
+        );
     }
 }

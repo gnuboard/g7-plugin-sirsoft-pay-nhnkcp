@@ -4,6 +4,11 @@ import {
     PaymentCloseReportContext,
     reportPaymentWindowClosed,
 } from '../paymentCloseReport';
+import {
+    applePayUnsupportedMessage,
+    isIosMobileDevice,
+    isNhnKcpApplePayMethod,
+} from '../support/applePayDevice';
 
 interface PgPaymentData {
     order_number: string;
@@ -134,6 +139,7 @@ export function watchKcpPaymentFrameClosure(
  */
 function isMobileDevice(): boolean {
     if (typeof navigator === 'undefined') return false;
+    if (isIosMobileDevice()) return true;
 
     const nav = navigator as Navigator & { userAgentData?: { mobile: boolean } };
     if (nav.userAgentData?.mobile !== undefined) {
@@ -175,6 +181,17 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
     let closeReportContext: PaymentCloseReportContext | null = null;
 
     try {
+        if (isNhnKcpApplePayMethod(paymentMethod) && !isIosMobileDevice()) {
+            const message = applePayUnsupportedMessage();
+            G7Core?.state?.setLocal?.({
+                paymentErrorMessage: message,
+                isSubmittingOrder: false,
+                paymentMethod,
+            });
+            G7Core?.modal?.open?.('nhnkcp_payment_error_modal');
+            return;
+        }
+
         // 1. Client Config API 호출
         const configJson = await G7Core.api.get('/modules/sirsoft-ecommerce/payments/client-config/nhnkcp');
 

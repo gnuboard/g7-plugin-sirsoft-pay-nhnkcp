@@ -1,7 +1,14 @@
+import {
+    isIosMobileDevice,
+    isNhnKcpApplePayMethod,
+} from './support/applePayDevice';
+
 const PLUGIN_ID = 'sirsoft-pay_nhnkcp';
 const FLAG = '__kcpCheckoutEasyPayInjectorInstalled';
 const CHECKOUT_RE = /^\/shop\/checkout\/?$/;
 const LISTENER_FLAG = '__kcpCheckoutEasyPaySyncListenerAttached';
+const SYNC_RETRY_INTERVAL_MS = 200;
+const SYNC_RETRY_ATTEMPTS = 120;
 
 interface EasyPayCopy {
     heading: string;
@@ -23,16 +30,16 @@ const EASY_PAY_DEFINITIONS: EasyPayDefinition[] = [
     {
         id: 'nhnkcp_payco',
         configKey: 'PAYCO',
-        labels: ['PAYCO (NHN KCP)'],
+        labels: ['PAYCO (NHN KCP)', 'PAYCO NHN KCP 간편결제', 'PAYCO로 결제 (NHN KCP)', 'Pay with PAYCO (NHN KCP)'],
         ko: {
             heading: 'PAYCO',
-            description: 'NHN KCP 간편결제',
-            title: 'PAYCO (NHN KCP)',
+            description: 'PAYCO로 결제 (NHN KCP)',
+            title: 'PAYCO로 결제 (NHN KCP)',
         },
         en: {
             heading: 'PAYCO',
-            description: 'NHN KCP easy payment',
-            title: 'PAYCO (NHN KCP)',
+            description: 'Pay with PAYCO (NHN KCP)',
+            title: 'Pay with PAYCO (NHN KCP)',
         },
         markText: 'P',
         markClassName: 'bg-red-500 text-white',
@@ -40,16 +47,16 @@ const EASY_PAY_DEFINITIONS: EasyPayDefinition[] = [
     {
         id: 'nhnkcp_naverpay',
         configKey: 'NAVERPAY',
-        labels: ['네이버페이 (NHN KCP)', 'Naver Pay (NHN KCP)', 'NaverPay (NHN KCP)'],
+        labels: ['네이버페이 (NHN KCP)', '네이버페이 신용카드로 결제 (NHN KCP)', 'NaverPay NHN KCP 간편결제', 'Naver Pay (NHN KCP)', 'NaverPay (NHN KCP)', 'Pay by Naver Pay credit card (NHN KCP)'],
         ko: {
-            heading: 'NaverPay',
-            description: 'NHN KCP 간편결제',
-            title: 'NaverPay (NHN KCP)',
+            heading: '네이버페이 (카드)',
+            description: '네이버페이 신용카드로 결제 (NHN KCP)',
+            title: '네이버페이 신용카드로 결제 (NHN KCP)',
         },
         en: {
-            heading: 'NaverPay',
-            description: 'NHN KCP easy payment',
-            title: 'NaverPay (NHN KCP)',
+            heading: 'Naver Pay (Card)',
+            description: 'Pay by Naver Pay credit card (NHN KCP)',
+            title: 'Pay by Naver Pay credit card (NHN KCP)',
         },
         markText: 'N',
         markClassName: 'bg-green-500 text-white',
@@ -57,16 +64,16 @@ const EASY_PAY_DEFINITIONS: EasyPayDefinition[] = [
     {
         id: 'nhnkcp_naverpay_point',
         configKey: 'NAVERPAY POINT',
-        labels: ['네이버페이 포인트 (NHN KCP)', 'Naver Pay Point (NHN KCP)', 'NaverPay Point (NHN KCP)'],
+        labels: ['네이버페이 포인트 (NHN KCP)', '네이버페이 머니/포인트로 결제 (NHN KCP)', 'NaverPay 포인트 NHN KCP 포인트 간편결제', 'Naver Pay Point (NHN KCP)', 'NaverPay Point (NHN KCP)', 'Pay with Naver Pay Money/Points (NHN KCP)'],
         ko: {
-            heading: 'NaverPay 포인트',
-            description: 'NHN KCP 포인트 간편결제',
-            title: 'NaverPay 포인트 (NHN KCP)',
+            heading: '네이버페이 (포인트)',
+            description: '네이버페이 머니/포인트로 결제 (NHN KCP)',
+            title: '네이버페이 머니/포인트로 결제 (NHN KCP)',
         },
         en: {
-            heading: 'NaverPay Point',
-            description: 'NHN KCP point easy payment',
-            title: 'NaverPay Point (NHN KCP)',
+            heading: 'Naver Pay (Point)',
+            description: 'Pay with Naver Pay Money/Points (NHN KCP)',
+            title: 'Pay with Naver Pay Money/Points (NHN KCP)',
         },
         markText: 'NP',
         markClassName: 'bg-green-600 text-white',
@@ -74,16 +81,16 @@ const EASY_PAY_DEFINITIONS: EasyPayDefinition[] = [
     {
         id: 'nhnkcp_kakaopay',
         configKey: 'KAKAOPAY',
-        labels: ['카카오페이 (NHN KCP)', 'Kakao Pay (NHN KCP)', 'KakaoPay (NHN KCP)'],
+        labels: ['카카오페이 (NHN KCP)', '카카오페이로 결제 (NHN KCP)', 'KakaoPay NHN KCP 간편결제', 'Kakao Pay (NHN KCP)', 'KakaoPay (NHN KCP)', 'Pay with Kakao Pay (NHN KCP)'],
         ko: {
-            heading: 'KakaoPay',
-            description: 'NHN KCP 간편결제',
-            title: 'KakaoPay (NHN KCP)',
+            heading: '카카오페이',
+            description: '카카오페이로 결제 (NHN KCP)',
+            title: '카카오페이로 결제 (NHN KCP)',
         },
         en: {
-            heading: 'KakaoPay',
-            description: 'NHN KCP easy payment',
-            title: 'KakaoPay (NHN KCP)',
+            heading: 'Kakao Pay',
+            description: 'Pay with Kakao Pay (NHN KCP)',
+            title: 'Pay with Kakao Pay (NHN KCP)',
         },
         markText: 'K',
         markClassName: 'bg-yellow-400 text-gray-950',
@@ -91,16 +98,16 @@ const EASY_PAY_DEFINITIONS: EasyPayDefinition[] = [
     {
         id: 'nhnkcp_applepay',
         configKey: 'APPLEPAY',
-        labels: ['Apple Pay (NHN KCP)'],
+        labels: ['애플페이 (NHN KCP)', '애플페이로 결제 (NHN KCP)', 'Apple Pay NHN KCP 간편결제', 'Apple Pay (NHN KCP)', 'Pay with Apple Pay (NHN KCP)'],
         ko: {
-            heading: 'Apple Pay',
-            description: 'NHN KCP 간편결제',
-            title: 'Apple Pay (NHN KCP)',
+            heading: '애플페이',
+            description: '애플페이로 결제 (NHN KCP)',
+            title: '애플페이로 결제 (NHN KCP)',
         },
         en: {
             heading: 'Apple Pay',
-            description: 'NHN KCP easy payment',
-            title: 'Apple Pay (NHN KCP)',
+            description: 'Pay with Apple Pay (NHN KCP)',
+            title: 'Pay with Apple Pay (NHN KCP)',
         },
         markText: 'A',
         markClassName: 'bg-gray-900 text-white',
@@ -133,6 +140,14 @@ function copyFor(definition: EasyPayDefinition): EasyPayCopy {
     return isKoreanPage() ? definition.ko : definition.en;
 }
 
+function displayText(value: string): string {
+    return value
+        .replaceAll('네이버페이', '네이\u200B버페이')
+        .replaceAll('카카오페이', '카카\u200B오페이')
+        .replaceAll('Naver Pay', 'Naver\u200B Pay')
+        .replaceAll('Kakao Pay', 'Kakao\u200B Pay');
+}
+
 function findDefinitionById(id: string | undefined): EasyPayDefinition | null {
     return EASY_PAY_DEFINITIONS.find((definition) => definition.id === id) ?? null;
 }
@@ -153,6 +168,23 @@ function findPaymentRow(button: HTMLButtonElement): HTMLElement | null {
         ?? button.querySelector<HTMLElement>('.flex.items-center');
 }
 
+function alignPaymentTextLeft(button: HTMLButtonElement, heading?: HTMLElement, description?: HTMLElement): void {
+    button.style.textAlign = 'left';
+
+    const row = findPaymentRow(button);
+    if (row) {
+        row.style.justifyContent = 'flex-start';
+        row.style.textAlign = 'left';
+        row.style.width = '100%';
+    }
+
+    const textContainer = heading?.parentElement ?? description?.parentElement;
+    if (textContainer instanceof HTMLElement) {
+        textContainer.style.textAlign = 'left';
+        textContainer.style.minWidth = '0';
+    }
+}
+
 function createMark(definition: EasyPayDefinition): HTMLSpanElement {
     const mark = document.createElement('span');
     mark.dataset.nhnkcpEasyPayMark = 'true';
@@ -171,6 +203,10 @@ function removeKginicisBrandArtifacts(button: HTMLButtonElement): void {
     delete button.dataset.kginicisBrandPaymentButton;
     delete button.dataset.kginicisBrandPaymentMethod;
     delete button.dataset.kginicisNaverpayBrandButton;
+
+    button.querySelectorAll<HTMLElement>('[data-kginicis-brand-payment-mark="true"], [data-kginicis-naverpay-mark="true"]').forEach((element) => {
+        element.remove();
+    });
 
     button.querySelectorAll<HTMLElement>('[data-kginicis-brand-payment-heading], [data-kginicis-brand-payment-description], [data-kginicis-naverpay-heading], [data-kginicis-naverpay-description]').forEach((element) => {
         delete element.dataset.kginicisBrandPaymentHeading;
@@ -210,24 +246,28 @@ function ensureMark(button: HTMLButtonElement, definition: EasyPayDefinition): v
 function updatePaymentText(button: HTMLButtonElement, definition: EasyPayDefinition): void {
     const paragraphs = Array.from(button.querySelectorAll<HTMLParagraphElement>('p'));
     const copy = copyFor(definition);
+    const headingText = displayText(copy.heading);
+    const descriptionText = displayText(copy.description);
 
     const heading = paragraphs[0];
     const description = paragraphs[1];
 
-    if (heading && heading.textContent !== copy.heading) {
-        heading.textContent = copy.heading;
+    if (heading && heading.textContent !== headingText) {
+        heading.textContent = headingText;
     }
     if (heading) {
         heading.setAttribute('aria-label', copy.heading);
+        heading.style.textAlign = 'left';
         heading.style.whiteSpace = 'normal';
         heading.style.wordBreak = 'keep-all';
         heading.style.overflowWrap = 'anywhere';
     }
 
-    if (description && description.textContent !== copy.description) {
-        description.textContent = copy.description;
+    if (description && description.textContent !== descriptionText) {
+        description.textContent = descriptionText;
     }
     if (description) {
+        description.style.textAlign = 'left';
         description.style.fontSize = '12px';
         description.style.lineHeight = '1rem';
         description.style.whiteSpace = 'normal';
@@ -235,11 +275,24 @@ function updatePaymentText(button: HTMLButtonElement, definition: EasyPayDefinit
         description.style.overflowWrap = 'anywhere';
     }
 
+    alignPaymentTextLeft(button, heading, description);
     button.title = copy.title;
 }
 
 function showButton(button: HTMLButtonElement, definition: EasyPayDefinition): void {
+    if (isNhnKcpApplePayMethod(definition.id) && !isIosMobileDevice()) {
+        button.hidden = true;
+        button.disabled = true;
+        button.style.display = 'none';
+        button.setAttribute('aria-hidden', 'true');
+        button.dataset.nhnkcpEasyPayMethod = definition.id;
+        button.dataset.nhnkcpEasyPayHidden = 'true';
+        delete button.dataset.nhnkcpEasyPayVisible;
+        return;
+    }
+
     if (button.hidden) button.hidden = false;
+    if (button.disabled) button.disabled = false;
     if (button.style.display === 'none') button.style.removeProperty('display');
     button.removeAttribute('aria-hidden');
     button.dataset.nhnkcpEasyPayMethod = definition.id;
@@ -325,10 +378,10 @@ function startSync(): void {
         attempts += 1;
         void syncRenderedCheckoutEasyPayMethods();
 
-        if (attempts >= 50) {
+        if (attempts >= SYNC_RETRY_ATTEMPTS) {
             stopRetries();
         }
-    }, 200);
+    }, SYNC_RETRY_INTERVAL_MS);
 
     const body = document.body as HTMLElement & Record<string, unknown>;
     if (body[LISTENER_FLAG]) return;
