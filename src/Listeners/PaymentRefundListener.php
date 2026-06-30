@@ -75,11 +75,14 @@ class PaymentRefundListener implements HookListenerInterface
             $apiService = app(NhnKcpApiService::class);
 
             $cancelMsg = $reason ?? __('sirsoft-pay_nhnkcp::messages.refund.default_reason');
+            // $refundAmount 는 코어가 결제 통화(order_currency)로 환산해 전달한 실환불액이다.
             $cancelAmt = (int) $refundAmount;
             $ordrIdxx = (string) $order->order_number;
 
+            // 결제 통화 기준 누적·총액 (paid_amount_local·mc_cancelled_amount[order_currency] 동일 단위).
             $paidAmount = (int) $payment->paid_amount_local;
-            $previousCancelled = max(0, (int) $payment->cancelled_amount - $cancelAmt);
+            $cumulativeCancelled = (int) round((float) $this->cancelledLocalAmount($payment));
+            $previousCancelled = max(0, $cumulativeCancelled - $cancelAmt);
             $totalAmt = max($cancelAmt, $paidAmount - $previousCancelled);
             $isPartial = $previousCancelled > 0 || $cancelAmt < $paidAmount;
             $response = $apiService->cancelPayment($tno, $ordrIdxx, $cancelAmt, $cancelMsg, $isPartial, $totalAmt);
@@ -111,5 +114,26 @@ class PaymentRefundListener implements HookListenerInterface
                 'transaction_id' => null,
             ];
         }
+    }
+
+    /**
+     * 결제 통화(order_currency) 기준 누적 취소액을 반환합니다.
+     *
+     * 코어가 결제 통화로 누적한 mc_cancelled_amount[order_currency] 를 우선 사용하고,
+     * 없으면(레거시 결제) base 누적 cancelled_amount 로 폴백합니다.
+     *
+     * @param  OrderPayment  $payment  결제 레코드
+     * @return float 결제 통화 기준 누적 취소액
+     */
+    private function cancelledLocalAmount(OrderPayment $payment): float
+    {
+        $currency = $payment->currency;
+        $mc = $payment->mc_cancelled_amount ?? [];
+
+        if ($currency !== null && isset($mc[$currency])) {
+            return (float) $mc[$currency];
+        }
+
+        return (float) $payment->cancelled_amount;
     }
 }
