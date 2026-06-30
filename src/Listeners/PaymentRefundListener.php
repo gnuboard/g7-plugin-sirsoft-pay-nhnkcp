@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Plugins\Sirsoft\PayNhnkcp\Listeners;
 
 use App\Contracts\Extension\HookListenerInterface;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Modules\Sirsoft\Ecommerce\Models\Order;
 use Modules\Sirsoft\Ecommerce\Models\OrderPayment;
@@ -72,30 +73,45 @@ class PaymentRefundListener implements HookListenerInterface
         }
 
         try {
-            $apiService = app(NhnKcpApiService::class);
+            $lock = Cache::lock('nhnkcp:refund:' . $payment->id, 30);
+            if (! $lock->get()) {
+                return [
+                    'success' => false,
+                    'error_code' => 'REFUND_IN_PROGRESS',
+                    'error_message' => __('sirsoft-pay_nhnkcp::messages.refund.in_progress'),
+                    'transaction_id' => null,
+                ];
+            }
 
-            $cancelMsg = $reason ?? __('sirsoft-pay_nhnkcp::messages.refund.default_reason');
-            $cancelAmt = (int) $refundAmount;
-            $ordrIdxx = (string) $order->order_number;
+            try {
+                $apiService = app(NhnKcpApiService::class);
+                $this->restorePaymentCredentials($apiService, $payment);
 
-            $paidAmount = (int) $payment->paid_amount_local;
-            $previousCancelled = max(0, (int) $payment->cancelled_amount - $cancelAmt);
-            $totalAmt = max($cancelAmt, $paidAmount - $previousCancelled);
-            $isPartial = $previousCancelled > 0 || $cancelAmt < $paidAmount;
-            $response = $apiService->cancelPayment($tno, $ordrIdxx, $cancelAmt, $cancelMsg, $isPartial, $totalAmt);
+                $cancelMsg = $reason ?? __('sirsoft-pay_nhnkcp::messages.refund.default_reason');
+                $cancelAmt = (int) $refundAmount;
+                $ordrIdxx = (string) $order->order_number;
 
-            Log::info('KCP: refund success', [
-                'order_id' => $order->id,
-                'tno' => $tno,
-                'cancel_amt' => $cancelAmt,
-            ]);
+                $paidAmount = (int) $payment->paid_amount_local;
+                $previousCancelled = max(0, (int) $payment->cancelled_amount - $cancelAmt);
+                $totalAmt = max($cancelAmt, $paidAmount - $previousCancelled);
+                $isPartial = $previousCancelled > 0 || $cancelAmt < $paidAmount;
+                $response = $apiService->cancelPayment($tno, $ordrIdxx, $cancelAmt, $cancelMsg, $isPartial, $totalAmt);
 
-            return [
-                'success' => true,
-                'error_code' => null,
-                'error_message' => null,
-                'transaction_id' => $response['tno'] ?? $tno,
-            ];
+                Log::info('KCP: refund success', [
+                    'order_id' => $order->id,
+                    'tno' => $tno,
+                    'cancel_amt' => $cancelAmt,
+                ]);
+
+                return [
+                    'success' => true,
+                    'error_code' => null,
+                    'error_message' => null,
+                    'transaction_id' => $response['tno'] ?? $tno,
+                ];
+            } finally {
+                $lock->release();
+            }
         } catch (\Exception $e) {
             Log::error('KCP: refund failed', [
                 'order_id' => $order->id,
@@ -111,5 +127,15 @@ class PaymentRefundListener implements HookListenerInterface
                 'transaction_id' => null,
             ];
         }
+    }
+
+    private function restorePaymentCredentials(NhnKcpApiService $apiService, OrderPayment $payment): void
+    {
+        $meta = $payment->payment_meta ?? [];
+        if (! array_key_exists('is_test_mode', $meta) || empty($meta['site_cd'])) {
+            return;
+        }
+
+        $apiService->useStoredCredentials((bool) $meta['is_test_mode'], (string) $meta['site_cd']);
     }
 }

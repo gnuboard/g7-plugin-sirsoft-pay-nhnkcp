@@ -103,7 +103,29 @@ class MobileApprovalController
 
         try {
             $order = $this->orderService->findByOrderNumber($validated['order_number']);
-            if ($order && ! $order->order_status->isBeforePayment()) {
+            if (! $order) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Order not found.',
+                ], 404);
+            }
+
+            if ((int) $order->user_id !== (int) ($request->user()?->id ?? 0)) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'You cannot request a NHN KCP approval key for this order.',
+                ], 403);
+            }
+
+            $expectedAmount = $this->expectedPaymentPrice($order);
+            if ((int) $validated['amount'] !== $expectedAmount) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Payment amount does not match the order amount.',
+                ], 422);
+            }
+
+            if (! $order->order_status->isBeforePayment()) {
                 $restored = $this->restoreRetryableKcpOrder($order, (int) $validated['amount']);
                 if (! $restored) {
                     return response()->json([

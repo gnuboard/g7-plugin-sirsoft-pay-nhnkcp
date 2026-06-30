@@ -35,6 +35,16 @@ class RestrictKcpIpTest extends PluginTestCase
         $this->app->instance(PluginSettingsService::class, $mock);
     }
 
+    private function mockSettingsWithoutMode(): void
+    {
+        $mock = $this->createMock(PluginSettingsService::class);
+        $mock->method('get')->willReturn([
+            'redirect_success_url' => '/shop/orders/{orderId}/complete',
+            'redirect_fail_url'    => '/shop/checkout',
+        ]);
+        $this->app->instance(PluginSettingsService::class, $mock);
+    }
+
     private function postVbankNotify(string $remoteIp): \Illuminate\Testing\TestResponse
     {
         return $this->withServerVariables(['REMOTE_ADDR' => $remoteIp])
@@ -50,6 +60,15 @@ class RestrictKcpIpTest extends PluginTestCase
     public function test_blocks_unauthorized_ip_in_live_mode(): void
     {
         $this->mockSettings(isTestMode: false);
+
+        $response = $this->postVbankNotify(self::UNAUTHORIZED_IP);
+
+        $response->assertForbidden();
+    }
+
+    public function test_missing_test_mode_setting_fails_closed_for_unauthorized_ip(): void
+    {
+        $this->mockSettingsWithoutMode();
 
         $response = $this->postVbankNotify(self::UNAUTHORIZED_IP);
 

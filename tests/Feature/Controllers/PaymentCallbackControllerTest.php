@@ -131,6 +131,31 @@ class PaymentCallbackControllerTest extends PluginTestCase
         ], $overrides);
     }
 
+    private function markVbankIssued(
+        Order $order,
+        string $tno = 'KCP_VBANK_TNO_ISSUED',
+        string $account = 'T1234567890',
+    ): void {
+        $order->payment->update([
+            'transaction_id' => $tno,
+            'vbank_name' => '테스트은행',
+            'vbank_number' => $account,
+            'vbank_holder' => 'NHN KCP',
+            'vbank_issued_at' => now(),
+            'payment_meta' => [
+                'tno' => $tno,
+                'site_cd' => self::TEST_SITE_CD,
+                'is_test_mode' => true,
+                'pg_response_sanitized' => true,
+                'pg_raw_response' => [
+                    'res_cd' => 'V000',
+                    'tno' => $tno,
+                    'bankname' => '테스트은행',
+                ],
+            ],
+        ]);
+    }
+
     // ===== 성공 콜백 =====
 
     public function test_auth_callback_redirects_to_complete_page_on_valid_payment(): void
@@ -154,6 +179,27 @@ class PaymentCallbackControllerTest extends PluginTestCase
         $payment->refresh();
         $this->assertEquals($tno, $payment->transaction_id);
         $this->assertEquals('APP12345', $payment->card_approval_number);
+    }
+
+    public function test_auth_callback_rejects_browser_amount_mismatch_before_cli_approval(): void
+    {
+        $order = $this->createTestOrder(50000);
+        $this->mockPluginSettings();
+
+        $mock = $this->createMock(NhnKcpApiService::class);
+        $mock->expects($this->never())->method('approvePayment');
+        $this->app->instance(NhnKcpApiService::class, $mock);
+
+        $response = $this->post(
+            '/plugins/sirsoft-pay_nhnkcp/payment/callback',
+            $this->makeCallbackParams($order->order_number, 1)
+        );
+
+        $response->assertRedirect();
+        $this->assertStringContainsString('error=amount_mismatch', $response->headers->get('Location'));
+
+        $order->refresh();
+        $this->assertNotEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
     }
 
     public function test_auth_callback_stores_only_sanitized_pg_response_fields(): void
@@ -507,9 +553,13 @@ class PaymentCallbackControllerTest extends PluginTestCase
     public function test_vbank_notify_completes_payment_on_op_cd_50(): void
     {
         $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
+        $this->markVbankIssued($order, 'KCP_VBANK_TNO_50');
 
         $response = $this->postVbankNotify(
-            $this->makeVbankNotifyPayload($order->order_number, 30000, ['op_cd' => '50'])
+            $this->makeVbankNotifyPayload($order->order_number, 30000, [
+                'op_cd' => '50',
+                'tno' => 'KCP_VBANK_TNO_50',
+            ])
         );
 
         $this->assertKcpNotifyOk($response);
@@ -524,15 +574,22 @@ class PaymentCallbackControllerTest extends PluginTestCase
     public function test_vbank_notify_idempotent_on_op_cd_01_resend(): void
     {
         $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
+        $this->markVbankIssued($order, 'KCP_VBANK_TNO_RESEND');
 
         // 첫 통보 — 입금완료
         $this->postVbankNotify(
-            $this->makeVbankNotifyPayload($order->order_number, 30000, ['op_cd' => '50'])
+            $this->makeVbankNotifyPayload($order->order_number, 30000, [
+                'op_cd' => '50',
+                'tno' => 'KCP_VBANK_TNO_RESEND',
+            ])
         );
 
         // 두 번째 — 재전송 (op_cd=01), 동일 noti_id 가정
         $response = $this->postVbankNotify(
-            $this->makeVbankNotifyPayload($order->order_number, 30000, ['op_cd' => '01'])
+            $this->makeVbankNotifyPayload($order->order_number, 30000, [
+                'op_cd' => '01',
+                'tno' => 'KCP_VBANK_TNO_RESEND',
+            ])
         );
 
         $this->assertKcpNotifyOk($response);
@@ -545,9 +602,11 @@ class PaymentCallbackControllerTest extends PluginTestCase
     public function test_vbank_notify_completes_payment_on_op_cd_18_testadmin(): void
     {
         $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
+        $this->markVbankIssued($order, 'KCP_VBANK_TNO_TESTADMIN');
 
         $response = $this->postVbankNotify(
             $this->makeVbankNotifyPayload($order->order_number, 30000, [
+                'tno' => 'KCP_VBANK_TNO_TESTADMIN',
                 'op_cd' => '18',
                 'ipgm_stat' => 'STIY',
             ])
@@ -565,9 +624,13 @@ class PaymentCallbackControllerTest extends PluginTestCase
     public function test_vbank_notify_logs_op_cd_13_cancel(): void
     {
         $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
+        $this->markVbankIssued($order, 'KCP_VBANK_TNO_CANCELLED');
 
         $response = $this->postVbankNotify(
-            $this->makeVbankNotifyPayload($order->order_number, 30000, ['op_cd' => '13'])
+            $this->makeVbankNotifyPayload($order->order_number, 30000, [
+                'op_cd' => '13',
+                'tno' => 'KCP_VBANK_TNO_CANCELLED',
+            ])
         );
 
         $this->assertKcpNotifyOk($response);
@@ -611,6 +674,7 @@ class PaymentCallbackControllerTest extends PluginTestCase
     public function test_vbank_notify_accepts_kcp_official_payload(): void
     {
         $order = $this->createTestOrder(50000, [], PaymentMethodEnum::VBANK);
+        $this->markVbankIssued($order, 'KCP_TNO_REAL', 'T9876543210');
 
         $response = $this->postVbankNotify([
             'site_cd'   => 'T0000',
@@ -636,6 +700,7 @@ class PaymentCallbackControllerTest extends PluginTestCase
     public function test_vbank_notify_stores_only_sanitized_pg_response_fields(): void
     {
         $order = $this->createTestOrder(50000, [], PaymentMethodEnum::VBANK);
+        $this->markVbankIssued($order, 'KCP_VBANK_TNO_SANITIZED', 'T9876543210');
 
         $response = $this->postVbankNotify(
             $this->makeVbankNotifyPayload($order->order_number, 50000, [
@@ -660,6 +725,110 @@ class PaymentCallbackControllerTest extends PluginTestCase
         $this->assertArrayNotHasKey('remitter', $meta['pg_raw_response']);
         $this->assertArrayNotHasKey('account', $meta['pg_raw_response']);
         $this->assertArrayNotHasKey('unexpected_sensitive', $meta['pg_raw_response']);
+    }
+
+    public function test_vbank_notify_retries_when_payment_was_not_issued_by_kcp(): void
+    {
+        $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
+
+        $response = $this->postVbankNotify(
+            $this->makeVbankNotifyPayload($order->order_number, 30000, [
+                'tno' => 'ATTACKER_TNO_WITHOUT_ISSUE',
+            ])
+        );
+
+        $this->assertKcpNotifyRetry($response);
+
+        $order->refresh();
+        $this->assertNotEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
+    }
+
+    public function test_vbank_notify_retries_on_tno_mismatch(): void
+    {
+        $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
+        $this->markVbankIssued($order, 'KCP_VBANK_REAL_TNO');
+
+        $response = $this->postVbankNotify(
+            $this->makeVbankNotifyPayload($order->order_number, 30000, [
+                'tno' => 'ATTACKER_TNO',
+            ])
+        );
+
+        $this->assertKcpNotifyRetry($response);
+
+        $order->refresh();
+        $this->assertNotEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
+    }
+
+    public function test_vbank_notify_retries_on_account_mismatch(): void
+    {
+        $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
+        $this->markVbankIssued($order, 'KCP_VBANK_REAL_TNO', 'T1234567890');
+
+        $response = $this->postVbankNotify(
+            $this->makeVbankNotifyPayload($order->order_number, 30000, [
+                'tno' => 'KCP_VBANK_REAL_TNO',
+                'account' => 'T9999999999',
+            ])
+        );
+
+        $this->assertKcpNotifyRetry($response);
+
+        $order->refresh();
+        $this->assertNotEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
+    }
+
+    public function test_vbank_notify_retries_on_site_cd_mismatch(): void
+    {
+        $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
+        $this->markVbankIssued($order, 'KCP_VBANK_REAL_TNO', 'T1234567890');
+
+        $response = $this->postVbankNotify(
+            $this->makeVbankNotifyPayload($order->order_number, 30000, [
+                'site_cd' => 'T9999',
+                'tno' => 'KCP_VBANK_REAL_TNO',
+            ])
+        );
+
+        $this->assertKcpNotifyRetry($response);
+
+        $order->refresh();
+        $this->assertNotEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
+    }
+
+    public function test_vbank_notify_retries_on_missing_site_cd(): void
+    {
+        $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
+        $this->markVbankIssued($order, 'KCP_VBANK_REAL_TNO', 'T1234567890');
+
+        $payload = $this->makeVbankNotifyPayload($order->order_number, 30000, [
+            'tno' => 'KCP_VBANK_REAL_TNO',
+        ]);
+        unset($payload['site_cd']);
+
+        $response = $this->postVbankNotify($payload);
+
+        $this->assertKcpNotifyRetry($response);
+
+        $order->refresh();
+        $this->assertNotEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
+    }
+
+    public function test_vbank_notify_retries_on_amount_mismatch(): void
+    {
+        $order = $this->createTestOrder(30000, [], PaymentMethodEnum::VBANK);
+        $this->markVbankIssued($order, 'KCP_VBANK_REAL_TNO', 'T1234567890');
+
+        $response = $this->postVbankNotify(
+            $this->makeVbankNotifyPayload($order->order_number, 29999, [
+                'tno' => 'KCP_VBANK_REAL_TNO',
+            ])
+        );
+
+        $this->assertKcpNotifyRetry($response);
+
+        $order->refresh();
+        $this->assertNotEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
     }
 
     // ===== 가상계좌 발급 (handleVbankIssued) 성공 처리 =====
