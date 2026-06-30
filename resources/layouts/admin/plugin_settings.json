@@ -1253,6 +1253,197 @@
                         ]
                     },
                     {
+                        "id": "cancel_server_ip_notice",
+                        "type": "basic",
+                        "name": "Div",
+                        "props": {
+                            "className": "mt-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-4"
+                        },
+                        "children": [
+                            {
+                                "type": "basic",
+                                "name": "Div",
+                                "props": {
+                                    "className": "flex gap-3"
+                                },
+                                "children": [
+                                    {
+                                        "type": "basic",
+                                        "name": "Icon",
+                                        "props": {
+                                            "name": "triangle-exclamation",
+                                            "className": "w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5"
+                                        }
+                                    },
+                                    {
+                                        "type": "basic",
+                                        "name": "Div",
+                                        "props": {
+                                            "className": "flex-1 min-w-0"
+                                        },
+                                        "children": [
+                                            {
+                                                "type": "basic",
+                                                "name": "H3",
+                                                "props": {
+                                                    "className": "text-sm font-semibold text-warning-soft"
+                                                },
+                                                "text": "$t:sirsoft-pay_nhnkcp.settings.cancel_server_ip_title"
+                                            },
+                                            {
+                                                "type": "basic",
+                                                "name": "P",
+                                                "props": {
+                                                    "className": "mt-1 text-warning-soft"
+                                                },
+                                                "text": "$t:sirsoft-pay_nhnkcp.settings.cancel_server_ip_body"
+                                            },
+                                            {
+                                                "type": "basic",
+                                                "name": "Div",
+                                                "props": {
+                                                    "className": "mt-3 rounded border border-amber-200 dark:border-amber-800 bg-white/70 dark:bg-gray-900/30 px-3 py-2"
+                                                },
+                                                "children": [
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "P",
+                                                        "props": {
+                                                            "className": "text-xs font-medium text-amber-900 dark:text-amber-200"
+                                                        },
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.cancel_server_ip_path"
+                                                    },
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "P",
+                                                        "props": {
+                                                            "className": "mt-1 text-xs text-amber-800 dark:text-amber-100"
+                                                        },
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.cancel_server_ip_effect"
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "type": "basic",
+                                                "name": "Div",
+                                                "props": {
+                                                    "className": "mt-3"
+                                                },
+                                                "children": [
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "P",
+                                                        "props": {
+                                                            "className": "text-xs font-medium text-amber-900 dark:text-amber-200 mb-1.5"
+                                                        },
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.cancel_server_ip_value_label"
+                                                    },
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "Div",
+                                                        "props": {
+                                                            "className": "flex-center gap-2"
+                                                        },
+                                                        "children": [
+                                                            {
+                                                                "type": "basic",
+                                                                "name": "Input",
+                                                                "props": {
+                                                                    "type": "text",
+                                                                    "readOnly": true,
+                                                                    "value": "{{health.data.summary.cancel_server_ip.address ?? ''}}",
+                                                                    "placeholder": "$t:sirsoft-pay_nhnkcp.settings.cancel_server_ip_unavailable",
+                                                                    "className": "input-readonly flex-1 font-mono"
+                                                                }
+                                                            },
+                                                            {
+                                                                "type": "basic",
+                                                                "name": "Button",
+                                                                "if": "{{!!health.data.summary.cancel_server_ip.address}}",
+                                                                "props": {
+                                                                    "className": "flex-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-body border border-gray-300 dark:border-gray-600 rounded-lg font-medium transition-colors whitespace-nowrap"
+                                                                },
+                                                                "actions": [
+                                                                    {
+                                                                        "type": "click",
+                                                                        "handler": "sequence",
+                                                                        "actions": [
+                                                                            {
+                                                                                "handler": "sirsoft-pay_nhnkcp.copyToClipboard",
+                                                                                "params": {
+                                                                                    "text": "{{health.data.summary.cancel_server_ip.address}}"
+                                                                                }
+                                                                            },
+                                                                            {
+                                                                                "handler": "toast",
+                                                                                "params": {
+                                                                                    "type": "success",
+                                                                                    "message": "$t:sirsoft-pay_nhnkcp.settings.cancel_server_ip_copied"
+                                                                                }
+                                                                            }
+                                                                        ]
+                                                                    }
+                                                                ],
+                                                                "children": [
+                                                                    {
+                                                                        "type": "basic",
+                                                                        "name": "Icon",
+                                                                        "props": {
+                                                                            "name": "copy",
+                                                                            "className": "w-4 h-4"
+                                                                        }
+                                                                    },
+                                                                    {
+                                                                        "type": "basic",
+                                                                        "name": "Span",
+                                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.copy"
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    },
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "P",
+                                                        "props": {
+                                                            "className": "mt-1.5 text-xs text-amber-800 dark:text-amber-100"
+                                                        },
+                                                        "text": "{{health.data.summary.cancel_server_ip.source_label ?? ''}}"
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "type": "basic",
+                                                "name": "A",
+                                                "props": {
+                                                    "href": "https://partner.kcp.co.kr/",
+                                                    "target": "_blank",
+                                                    "rel": "noopener noreferrer",
+                                                    "className": "mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-amber-800 hover:text-amber-950 dark:text-amber-200 dark:hover:text-amber-100"
+                                                },
+                                                "children": [
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "Icon",
+                                                        "props": {
+                                                            "name": "external-link",
+                                                            "className": "w-4 h-4"
+                                                        }
+                                                    },
+                                                    {
+                                                        "type": "basic",
+                                                        "name": "Span",
+                                                        "text": "$t:sirsoft-pay_nhnkcp.settings.cancel_server_ip_link"
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
                         "id": "vbank_notify_section",
                         "type": "basic",
                         "name": "Div",
@@ -1311,6 +1502,14 @@
                                     },
                                     {
                                         "type": "basic",
+                                        "name": "P",
+                                        "props": {
+                                            "className": "text-xs text-gray-600 dark:text-gray-400 mb-4"
+                                        },
+                                        "text": "$t:sirsoft-pay_nhnkcp.settings.vbank_notify_path"
+                                    },
+                                    {
+                                        "type": "basic",
                                         "name": "Div",
                                         "props": {
                                             "className": "flex-center gap-2"
@@ -1338,7 +1537,7 @@
                                                         "handler": "sequence",
                                                         "actions": [
                                                             {
-                                                                "handler": "copyToClipboard",
+                                                                "handler": "sirsoft-pay_nhnkcp.copyToClipboard",
                                                                 "params": {
                                                                     "text": "{{_local.vbankInfo?.url ?? '/plugins/sirsoft-pay_nhnkcp/payment/vbank-notify'}}"
                                                                 }
@@ -1573,7 +1772,7 @@
                                                         "handler": "sequence",
                                                         "actions": [
                                                             {
-                                                                "handler": "copyToClipboard",
+                                                                "handler": "sirsoft-pay_nhnkcp.copyToClipboard",
                                                                 "params": {
                                                                     "text": "{{_local.vbankInfo?.escrow_common_notify_url ?? '/plugins/sirsoft-pay_nhnkcp/payment/escrow-common-notify'}}"
                                                                 }

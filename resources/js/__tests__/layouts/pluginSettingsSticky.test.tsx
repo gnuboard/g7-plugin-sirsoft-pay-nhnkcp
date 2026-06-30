@@ -49,7 +49,57 @@ function collectClassNames(node: unknown, classNames: string[] = []): string[] {
   return classNames;
 }
 
+function collectIds(node: unknown, ids: string[] = []): string[] {
+  if (!node || typeof node !== 'object') {
+    return ids;
+  }
+  const value = node as Record<string, unknown>;
+  if (typeof value.id === 'string') {
+    ids.push(value.id);
+  }
+  for (const child of Object.values(value)) {
+    collectIds(child, ids);
+  }
+
+  return ids;
+}
+
 describe('plugin_settings 하단 버튼 sticky 고정', () => {
+  it('가상계좌 입금통보 URL 등록 경로를 설정 화면에 노출해야 한다', () => {
+    const section = findById(pluginSettingsLayout, 'vbank_notify_section');
+    expect(section).toBeDefined();
+
+    const serialized = JSON.stringify(section);
+    expect(serialized).toContain('sirsoft-pay_nhnkcp.settings.section_vbank_notify');
+    expect(serialized).toContain('sirsoft-pay_nhnkcp.settings.vbank_notify_hint');
+    expect(serialized).toContain('sirsoft-pay_nhnkcp.settings.vbank_notify_path');
+  });
+
+  it('결제취소 서버 IP 등록 안내를 설정 화면에 노출해야 한다', () => {
+    const notice = findById(pluginSettingsLayout, 'cancel_server_ip_notice');
+    expect(notice).toBeDefined();
+
+    const className = classNameOf(notice);
+    expect(className).toContain('border-amber-200');
+    expect(className).toContain('dark:border-amber-700');
+
+    const serialized = JSON.stringify(notice);
+    expect(serialized).toContain('sirsoft-pay_nhnkcp.settings.cancel_server_ip_title');
+    expect(serialized).toContain('sirsoft-pay_nhnkcp.settings.cancel_server_ip_body');
+    expect(serialized).toContain('sirsoft-pay_nhnkcp.settings.cancel_server_ip_path');
+    expect(serialized).toContain('sirsoft-pay_nhnkcp.settings.cancel_server_ip_effect');
+    expect(serialized).toContain('sirsoft-pay_nhnkcp.settings.cancel_server_ip_value_label');
+    expect(serialized).toContain('health.data.summary.cancel_server_ip.address');
+    expect(serialized).toContain('sirsoft-pay_nhnkcp.copyToClipboard');
+    expect(serialized).toContain('https://partner.kcp.co.kr/');
+    expect(serialized).not.toContain('https://admin8.kcp.co.kr');
+
+    const ids = collectIds(pluginSettingsLayout);
+    expect(ids.indexOf('cancel_server_ip_notice')).toBeGreaterThan(-1);
+    expect(ids.indexOf('vbank_notify_section')).toBeGreaterThan(-1);
+    expect(ids.indexOf('cancel_server_ip_notice')).toBeLessThan(ids.indexOf('vbank_notify_section'));
+  });
+
   it('footer_buttons 에 sticky bottom 고정 클래스가 존재해야 한다', () => {
     const footer = findById(pluginSettingsLayout, 'footer_buttons');
     expect(footer).toBeDefined();
