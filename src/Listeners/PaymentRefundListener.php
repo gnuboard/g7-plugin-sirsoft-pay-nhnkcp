@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Plugins\Sirsoft\PayNhnkcp\Listeners;
 
 use App\Contracts\Extension\HookListenerInterface;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Modules\Sirsoft\Ecommerce\Models\Order;
 use Modules\Sirsoft\Ecommerce\Models\OrderPayment;
@@ -72,33 +73,49 @@ class PaymentRefundListener implements HookListenerInterface
         }
 
         try {
-            $apiService = app(NhnKcpApiService::class);
+            $lock = Cache::lock('nhnkcp:refund:' . $payment->id, 30);
+            if (! $lock->get()) {
+                return [
+                    'success' => false,
+                    'error_code' => 'REFUND_IN_PROGRESS',
+                    'error_message' => __('sirsoft-pay_nhnkcp::messages.refund.in_progress'),
+                    'transaction_id' => null,
+                ];
+            }
 
-            $cancelMsg = $reason ?? __('sirsoft-pay_nhnkcp::messages.refund.default_reason');
-            // $refundAmount 는 코어가 결제 통화(order_currency)로 환산해 전달한 실환불액이다.
-            $cancelAmt = (int) $refundAmount;
-            $ordrIdxx = (string) $order->order_number;
+            try {
+                $apiService = app(NhnKcpApiService::class);
+                $this->restorePaymentCredentials($apiService, $payment);
 
-            // 결제 통화 기준 누적·총액 (paid_amount_local·mc_cancelled_amount[order_currency] 동일 단위).
-            $paidAmount = (int) $payment->paid_amount_local;
-            $cumulativeCancelled = (int) round((float) $this->cancelledLocalAmount($payment));
-            $previousCancelled = max(0, $cumulativeCancelled - $cancelAmt);
-            $totalAmt = max($cancelAmt, $paidAmount - $previousCancelled);
-            $isPartial = $previousCancelled > 0 || $cancelAmt < $paidAmount;
-            $response = $apiService->cancelPayment($tno, $ordrIdxx, $cancelAmt, $cancelMsg, $isPartial, $totalAmt);
+                $cancelMsg = $reason ?? __('sirsoft-pay_nhnkcp::messages.refund.default_reason');
+                $cancelAmt = (int) $refundAmount;
+                $ordrIdxx = (string) $order->order_number;
 
-            Log::info('KCP: refund success', [
-                'order_id' => $order->id,
-                'tno' => $tno,
-                'cancel_amt' => $cancelAmt,
-            ]);
+                // $refundAmount 는 코어가 결제 통화(order_currency)로 환산해 전달한 실환불액이다.
+                // 누적 취소액도 결제 통화 기준(mc_cancelled_amount[order_currency])으로 맞춰야
+                // base≠결제통화 주문에서 부분취소 판정·총액이 어긋나 PG 실환불이 잘못 전송되지 않는다.
+                $paidAmount = (int) $payment->paid_amount_local;
+                $cumulativeCancelled = (int) round((float) $this->cancelledLocalAmount($payment));
+                $previousCancelled = max(0, $cumulativeCancelled - $cancelAmt);
+                $totalAmt = max($cancelAmt, $paidAmount - $previousCancelled);
+                $isPartial = $previousCancelled > 0 || $cancelAmt < $paidAmount;
+                $response = $apiService->cancelPayment($tno, $ordrIdxx, $cancelAmt, $cancelMsg, $isPartial, $totalAmt);
 
-            return [
-                'success' => true,
-                'error_code' => null,
-                'error_message' => null,
-                'transaction_id' => $response['tno'] ?? $tno,
-            ];
+                Log::info('KCP: refund success', [
+                    'order_id' => $order->id,
+                    'tno' => $tno,
+                    'cancel_amt' => $cancelAmt,
+                ]);
+
+                return [
+                    'success' => true,
+                    'error_code' => null,
+                    'error_message' => null,
+                    'transaction_id' => $response['tno'] ?? $tno,
+                ];
+            } finally {
+                $lock->release();
+            }
         } catch (\Exception $e) {
             Log::error('KCP: refund failed', [
                 'order_id' => $order->id,
@@ -114,6 +131,16 @@ class PaymentRefundListener implements HookListenerInterface
                 'transaction_id' => null,
             ];
         }
+    }
+
+    private function restorePaymentCredentials(NhnKcpApiService $apiService, OrderPayment $payment): void
+    {
+        $meta = $payment->payment_meta ?? [];
+        if (! array_key_exists('is_test_mode', $meta) || empty($meta['site_cd'])) {
+            return;
+        }
+
+        $apiService->useStoredCredentials((bool) $meta['is_test_mode'], (string) $meta['site_cd']);
     }
 
     /**

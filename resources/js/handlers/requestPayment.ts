@@ -31,6 +31,54 @@ interface RequestPaymentParams {
     paymentMethod?: string;
 }
 
+function normalizeCurrency(currency?: string): string {
+    const normalized = (currency ?? 'KRW').trim().toUpperCase();
+
+    return normalized || 'KRW';
+}
+
+export function isSupportedKcpCurrency(currency?: string): boolean {
+    return normalizeCurrency(currency) === 'KRW';
+}
+
+function unsupportedCurrencyMessage(currency?: string): string {
+    const normalized = normalizeCurrency(currency);
+    const isKo = ((typeof document !== 'undefined' ? document.documentElement.lang : '') || '')
+        .toLowerCase()
+        .startsWith('ko');
+
+    return isKo
+        ? `NHN KCP는 KRW 결제만 지원합니다. (${normalized})`
+        : `NHN KCP supports KRW payments only. (${normalized})`;
+}
+
+export function buildKcpTaxFields(pgPaymentData: PgPaymentData): Record<string, string> {
+    const paymentAmount = Math.max(0, Math.round(Number(pgPaymentData.amount ?? 0)));
+    const taxFreeAmt = Math.min(
+        Math.max(0, Math.round(Number(pgPaymentData.tax_free_amount ?? 0))),
+        paymentAmount,
+    );
+
+    if (taxFreeAmt <= 0) {
+        return {};
+    }
+
+    const taxTotalAmt = Math.max(0, Math.round(Number(pgPaymentData.tax_amount ?? 0)));
+    const originalVatAmt = Math.max(0, Math.round(Number(pgPaymentData.vat_amount ?? 0)));
+    const taxablePaymentAmt = Math.max(0, paymentAmount - taxFreeAmt);
+    const vatAmt = taxablePaymentAmt > 0 && taxTotalAmt > 0 && originalVatAmt > 0
+        ? Math.min(taxablePaymentAmt, Math.round(taxablePaymentAmt * (originalVatAmt / taxTotalAmt)))
+        : 0;
+    const supplyAmt = taxablePaymentAmt - vatAmt;
+
+    return {
+        tax_flag: 'TG03',
+        comm_tax_mny: String(supplyAmt),
+        comm_vat_mny: String(vatAmt),
+        comm_free_mny: String(taxFreeAmt),
+    };
+}
+
 interface ClientConfig {
     client_id: string;
     easy_pay_client_id?: string;
@@ -182,6 +230,13 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
     let closeReportContext: PaymentCloseReportContext | null = null;
 
     try {
+        if (!isSupportedKcpCurrency(pgPaymentData.currency)) {
+            const message = unsupportedCurrencyMessage(pgPaymentData.currency);
+            G7Core?.state?.setLocal?.({ paymentErrorMessage: message, isSubmittingOrder: false, paymentMethod });
+            G7Core?.modal?.open?.('nhnkcp_payment_error_modal');
+            return;
+        }
+
         if (isNhnKcpApplePayMethod(paymentMethod) && !isIosMobileDevice()) {
             const message = applePayUnsupportedMessage();
             G7Core?.state?.setLocal?.({
@@ -274,6 +329,7 @@ async function handleMobilePayment(
         buyr_mail: pgPaymentData.customer_email ?? '',
         buyr_tel1: pgPaymentData.customer_phone ?? '',
         ret_url: callbackUrl,
+        currency: normalizeCurrency(pgPaymentData.currency),
     });
 
     if (!approvalJson.success || !approvalJson.data) {
@@ -351,17 +407,7 @@ async function handlePcPayment(
         Ret_URL: callbackUrl,
     };
 
-    // 비과세 금액이 있는 경우 복합과세 분할 필드 추가 (복합과세 사이트 코드 계약 가맹점 전용)
-    const taxFreeAmt = pgPaymentData.tax_free_amount ?? 0;
-    if (taxFreeAmt > 0) {
-        const taxTotalAmt = pgPaymentData.tax_amount ?? 0;
-        const vatAmt = pgPaymentData.vat_amount ?? 0;
-        const supplyAmt = taxTotalAmt - vatAmt; // 공급가액 (VAT 제외)
-        fields['tax_flag']      = 'TG03';
-        fields['comm_tax_mny']  = String(supplyAmt);
-        fields['comm_vat_mny']  = String(vatAmt);
-        fields['comm_free_mny'] = String(taxFreeAmt);
-    }
+    Object.assign(fields, buildKcpTaxFields(pgPaymentData));
 
     // 가상계좌 전용 파라미터
     if (payMethod === '001000000000') {

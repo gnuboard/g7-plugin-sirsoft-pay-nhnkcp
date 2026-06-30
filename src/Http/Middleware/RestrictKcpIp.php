@@ -56,8 +56,9 @@ class RestrictKcpIp
     {
         $settings = $this->pluginSettingsService->get(self::PLUGIN_IDENTIFIER) ?? [];
 
-        // 테스트 모드는 우회 — 개발 환경 / KCP testadmin 모의입금 흐름 허용
-        if ($settings['is_test_mode'] ?? true) {
+        // 테스트 모드는 명시적으로 켜진 경우에만 우회한다.
+        // 설정 누락/오설정은 운영 모드처럼 fail-closed 로 처리해 webhook 무인증 노출을 막는다.
+        if (array_key_exists('is_test_mode', $settings) && (bool) $settings['is_test_mode']) {
             return $next($request);
         }
 

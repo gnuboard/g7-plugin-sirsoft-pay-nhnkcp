@@ -52,9 +52,12 @@ class KcpSoapService
             ? ($settings['test_site_cd'] ?? 'T0000')
             : $liveSiteCd;
 
-        $this->escrowSiteCd = $this->isTest
-            ? ($settings['escrow_test_site_cd'] ?? 'T0007')
-            : $liveSiteCd;
+        if ($this->isTest) {
+            $escrowTestSiteCd = trim((string) ($settings['escrow_test_site_cd'] ?? ''));
+            $this->escrowSiteCd = $escrowTestSiteCd !== '' ? $escrowTestSiteCd : $this->siteCd;
+        } else {
+            $this->escrowSiteCd = $liveSiteCd;
+        }
 
         $easyPayTestSiteCd = $settings['easy_pay_test_site_cd'] ?? 'S6729';
         $this->easyPaySiteCd = $this->isTest ? $easyPayTestSiteCd : $liveSiteCd;
@@ -91,7 +94,7 @@ class KcpSoapService
             throw new NhnKcpApiException(__('sirsoft-pay_nhnkcp::messages.errors.wsdl_missing', ['file' => $wsdlFile]));
         }
 
-        $siteCd = $this->resolveSiteCd($payMethodKey);
+        $siteCd = $escrow ? $this->escrowSiteCd : $this->resolveSiteCd($payMethodKey);
 
         try {
             $soapClient = new SoapClient($wsdlFile, [

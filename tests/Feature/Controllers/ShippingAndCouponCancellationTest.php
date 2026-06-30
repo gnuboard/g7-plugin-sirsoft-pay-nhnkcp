@@ -7,6 +7,7 @@ namespace Plugins\Sirsoft\PayNhnkcp\Tests\Feature\Controllers;
 use App\Extension\HookListenerRegistrar;
 use App\Extension\HookManager;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Modules\Sirsoft\Ecommerce\Database\Factories\OrderPaymentFactory;
 use Modules\Sirsoft\Ecommerce\Enums\CouponIssueRecordStatus;
@@ -392,6 +393,59 @@ class ShippingAndCouponCancellationTest extends PluginTestCase
             ])->assertOk()->assertJsonPath('success', true);
     }
 
+    public function test_cancel_restores_payment_time_credentials_before_kcp_refund(): void
+    {
+        $mock = $this->createMock(NhnKcpApiService::class);
+        $mock->expects($this->once())
+            ->method('useStoredCredentials')
+            ->with(false, 'SR123456');
+        $mock->expects($this->once())
+            ->method('cancelPayment')
+            ->willReturn(self::CANCEL_SUCCESS);
+        $this->app->instance(NhnKcpApiService::class, $mock);
+
+        $data = $this->createKcpOrderWithShipping(optionCount: 1, unitPrice: 20000, shippingFee: 3000);
+        $order = $data['order'];
+        $payment = $data['payment'];
+        $payment->update([
+            'payment_meta' => [
+                'is_test_mode' => false,
+                'site_cd' => 'SR123456',
+            ],
+        ]);
+
+        $this->actingAs($this->adminUser)
+            ->postJson("/api/modules/sirsoft-ecommerce/admin/orders/{$order->order_number}/cancel", [
+                'type'      => 'full',
+                'reason'    => 'changed_mind',
+                'cancel_pg' => true,
+            ])->assertOk()->assertJsonPath('success', true);
+    }
+
+    public function test_refund_returns_i18n_error_when_same_payment_is_already_refunding(): void
+    {
+        $data = $this->createKcpOrderWithShipping(optionCount: 1, unitPrice: 20000, shippingFee: 3000);
+        $order = $data['order'];
+        $payment = $data['payment'];
+        $lock = Cache::lock('nhnkcp:refund:' . $payment->id, 30);
+        $this->assertTrue($lock->get(), 'precondition: refund lock should be acquired');
+
+        try {
+            $listener = new PaymentRefundListener();
+
+            $result = $listener->processRefund([], $order, $payment, 23000, '동시 환불 테스트');
+
+            $this->assertFalse($result['success']);
+            $this->assertSame('REFUND_IN_PROGRESS', $result['error_code']);
+            $this->assertSame(
+                __('sirsoft-pay_nhnkcp::messages.refund.in_progress'),
+                $result['error_message']
+            );
+        } finally {
+            $lock->release();
+        }
+    }
+
     public function test_full_cancel_free_shipping_refunds_only_product_amount(): void
     {
         $this->stubKcpCancelSuccess();
@@ -449,7 +503,10 @@ class ShippingAndCouponCancellationTest extends PluginTestCase
         $response->assertOk()->assertJsonPath('success', true);
 
         $order->refresh();
-        $this->assertEquals(OrderStatusEnum::PARTIAL_CANCELLED, $order->order_status);
+        // 부분취소는 별도 주문 상태(partial_cancelled)를 두지 않는다 — 주문 상태는 진행 상태(결제완료)를
+        // 유지하고, 취소된 옵션만 CANCELLED 로 전이된다(OrderStatusEnum::PARTIAL_CANCELLED 폐기).
+        $this->assertEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
+        $this->assertEquals(OrderStatusEnum::CANCELLED, $options[0]->refresh()->option_status);
 
         $refund = OrderRefund::where('order_id', $order->id)->first();
         $this->assertNotNull($refund, '부분취소 후 환불 레코드가 생성되어야 합니다');
@@ -568,7 +625,9 @@ class ShippingAndCouponCancellationTest extends PluginTestCase
 
         $response->assertOk()->assertJsonPath('success', true);
         $order->refresh();
-        $this->assertEquals(OrderStatusEnum::PARTIAL_CANCELLED, $order->order_status);
+        // 부분취소는 주문 상태(결제완료)를 유지하고 취소된 옵션만 CANCELLED 로 전이된다(PARTIAL_CANCELLED 폐기).
+        $this->assertEquals(OrderStatusEnum::PAYMENT_COMPLETE, $order->order_status);
+        $this->assertEquals(OrderStatusEnum::CANCELLED, $options[0]->refresh()->option_status);
     }
 
     public function test_partial_cancel_rejected_when_coupon_condition_no_longer_met(): void
