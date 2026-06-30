@@ -255,7 +255,7 @@ class NhnKcpApiService
      * KCP 에스크로 배송 등록 (CLI 방식, mod_type=STE1)
      *
      * 에스크로 결제 후 상품을 발송할 때 KCP에 운송장번호를 등록합니다.
-     * 에스크로 테스트 결제는 T0007 site_cd를 사용하므로 escrowSiteCd로 호출합니다.
+     * 에스크로 테스트 결제는 별도 설정값이 있으면 그 site_cd를, 없으면 일반 테스트 site_cd를 사용합니다.
      *
      * @param  string  $tno       KCP 에스크로 거래번호
      * @param  string  $ordrIdxx  주문번호
@@ -598,7 +598,8 @@ class NhnKcpApiService
 
         if ($this->isTest) {
             $this->siteCd = $siteCdOverride !== '' ? $siteCdOverride : ($settings['test_site_cd'] ?? 'T0000');
-            $this->escrowSiteCd = $settings['escrow_test_site_cd'] ?? 'T0007';
+            $escrowTestSiteCd = trim((string) ($settings['escrow_test_site_cd'] ?? ''));
+            $this->escrowSiteCd = $escrowTestSiteCd !== '' ? $escrowTestSiteCd : $this->siteCd;
             $this->siteKey = $settings['test_site_key'] ?? '';
 
             return;

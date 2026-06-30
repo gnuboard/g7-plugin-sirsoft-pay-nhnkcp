@@ -235,7 +235,7 @@ export function installOrderResponseInterceptor(): void {
             pgPaymentData = {
                 order_number: orderData.order_number,
                 order_name: orderName,
-                amount: Math.floor(Number(orderData.total_amount ?? 0)),
+                amount: Math.floor(Number(orderData.total_due_amount ?? orderData.total_amount ?? 0)),
                 currency: 'KRW',
                 customer_name: orderData.orderer_name ?? null,
                 customer_email: orderData.orderer_email ?? null,

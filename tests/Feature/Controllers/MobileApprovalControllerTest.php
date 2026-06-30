@@ -61,6 +61,7 @@ class MobileApprovalControllerTest extends PluginTestCase
             'pay_url'      => self::TEST_PAY_URL,
         ]);
         $mock->method('getSiteCd')->willReturn('T0000');
+        $mock->method('getEscrowSiteCd')->willReturn('T0000');
         $this->app->instance(KcpSoapService::class, $mock);
     }
 
@@ -216,6 +217,21 @@ class MobileApprovalControllerTest extends PluginTestCase
             ->assertJsonPath('success', false);
     }
 
+    public function test_get_approval_key_rejects_non_krw_order(): void
+    {
+        $order = $this->createOrder(10000);
+        $order->currency = 'USD';
+        $order->save();
+        $this->expectSoapServiceNotCalled();
+        $this->mockPluginSettings();
+
+        $response = $this->actingAs($order->user)
+            ->postJson(self::APPROVAL_KEY_ENDPOINT, $this->approvalKeyPayload($order, ['currency' => 'USD']));
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('success', false);
+    }
+
     public function test_get_approval_key_validates_required_fields(): void
     {
         $user = User::factory()->create();
@@ -328,6 +344,35 @@ class MobileApprovalControllerTest extends PluginTestCase
             (string) $total,
             $fields['good_mny'],
             'good_mny = 공급가액 + 부가세 + 비과세'
+        );
+    }
+
+    public function test_mixed_tax_fields_are_rebalanced_to_payment_amount(): void
+    {
+        // 원 상품 과세/비과세 합계 21,000원에서 쿠폰/마일리지 등으로 실결제액이 19,000원이 된 상황.
+        $taxable = 11000;
+        $taxFree = 10000;
+        $paymentAmount = 19000;
+        $vat = 1000;
+
+        $order = $this->createOrder($paymentAmount, ['taxable' => $taxable, 'vat' => $vat, 'taxFree' => $taxFree]);
+        $this->mockSoapService();
+        $this->mockPluginSettings();
+
+        $response = $this->actingAs($order->user)
+            ->postJson(self::APPROVAL_KEY_ENDPOINT, $this->approvalKeyPayload($order));
+
+        $response->assertOk();
+        $fields = $response->json('data.fields');
+
+        $this->assertEquals('TG03', $fields['tax_flag']);
+        $this->assertEquals('8182', $fields['comm_tax_mny']);
+        $this->assertEquals('818', $fields['comm_vat_mny']);
+        $this->assertEquals('10000', $fields['comm_free_mny']);
+        $this->assertSame(
+            (int) $fields['good_mny'],
+            (int) $fields['comm_tax_mny'] + (int) $fields['comm_vat_mny'] + (int) $fields['comm_free_mny'],
+            'KCP 복합과세 분할합은 good_mny와 반드시 일치해야 함'
         );
     }
 
