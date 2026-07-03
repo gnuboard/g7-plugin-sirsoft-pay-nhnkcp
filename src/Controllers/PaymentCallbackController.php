@@ -7,6 +7,7 @@ namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
 use App\Extension\HookManager;
 use App\Services\PluginSettingsService;
 use Carbon\Carbon;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -21,6 +22,7 @@ use Plugins\Sirsoft\PayNhnkcp\Concerns\PreventsReplayCallback;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\RecordsPaymentWindowClosure;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\ResolvesEasyPayDisplay;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\SanitizesPgResponse;
+use Plugins\Sirsoft\PayNhnkcp\Concerns\SerializesPaymentCallbacks;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\SendsKcpNotifyResponse;
 use Plugins\Sirsoft\PayNhnkcp\Http\Requests\AuthCallbackRequest;
 use Plugins\Sirsoft\PayNhnkcp\Http\Requests\VbankNotifyRequest;
@@ -39,6 +41,7 @@ class PaymentCallbackController
     use RecordsPaymentWindowClosure;
     use ResolvesEasyPayDisplay;
     use SanitizesPgResponse;
+    use SerializesPaymentCallbacks;
     use SendsKcpNotifyResponse;
 
     private const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
@@ -180,6 +183,7 @@ class PaymentCallbackController
         $order = null;
         $approvedTno = null;
         $approvedAmtForCancel = 0;
+        $callbackLock = null;
 
         try {
             // 2단계: 주문 조회
@@ -190,6 +194,9 @@ class PaymentCallbackController
 
                 return redirect($this->resolveFailUrl(['error' => 'order_not_found', 'orderId' => $ordrIdxx]));
             }
+
+            $callbackLock = $this->acquireOrderCallbackLock('authCallback', $ordrIdxx);
+            $order = $order->fresh('payment') ?? $order;
 
             if ($order->order_status === OrderStatusEnum::CANCELLED) {
                 $restored = $this->restoreRetryableKcpOrder($order, $goodMny > 0 ? $goodMny : null);
@@ -345,6 +352,22 @@ class PaymentCallbackController
 
             return redirect($this->resolveSuccessUrl($ordrIdxx));
 
+        } catch (LockTimeoutException $e) {
+            Log::warning('KCP: authCallback skipped because callback lock is busy', [
+                'ordr_idxx' => $ordrIdxx,
+            ]);
+
+            $latestOrder = $this->orderService->findByOrderNumber($ordrIdxx);
+            if (($latestOrder?->payment?->isPaid() ?? false)
+                || $latestOrder?->order_status === OrderStatusEnum::PAYMENT_COMPLETE) {
+                return redirect($this->resolveSuccessUrl($ordrIdxx));
+            }
+
+            return redirect($this->resolveFailUrl([
+                'error' => 'callback_locked',
+                'orderId' => $ordrIdxx,
+            ]));
+
         } catch (PaymentAmountMismatchException $e) {
             Log::error('KCP: amount mismatch', [
                 'ordr_idxx' => $ordrIdxx,
@@ -390,6 +413,8 @@ class PaymentCallbackController
                 'message' => $e->getMessage(),
                 'orderId' => $ordrIdxx,
             ]));
+        } finally {
+            $this->releaseOrderCallbackLock($callbackLock);
         }
     }
 
@@ -418,6 +443,7 @@ class PaymentCallbackController
         $opCd = (string) ($validated['op_cd'] ?? '');
         $ipgmMny = (int) ($validated['ipgm_mnyx'] ?? 0);
         $notiId = $validated['noti_id'] ?? null;
+        $callbackLock = null;
 
         // tx_cd 가 TX00 가 아니면 본 endpoint 가 처리하지 않음.
         // (KCP 가 단일 webhook URL 에 모든 tx_cd 를 보낼 수도 있어 안전하게 무시 + result=0000)
@@ -453,6 +479,9 @@ class PaymentCallbackController
                 // 영구 실패 — 재시도 의미 없음. result=0000 으로 KCP 재통보 차단.
                 return $this->kcpNotifyResponse();
             }
+
+            $callbackLock = $this->acquireOrderCallbackLock('vbankNotify', $orderNo);
+            $order = $order->fresh('payment') ?? $order;
 
             $contextError = $this->validateVbankNotifyContext($order, $validated, $tno, $ipgmMny);
             if ($contextError !== null) {
@@ -498,6 +527,15 @@ class PaymentCallbackController
 
             return $this->kcpNotifyResponse();
 
+        } catch (LockTimeoutException $e) {
+            Log::warning('KCP: vbank notify lock timeout — retry requested', [
+                'tno' => $tno,
+                'order_no' => $orderNo,
+                'noti_id' => $notiId,
+            ]);
+
+            return $this->kcpNotifyRetry();
+
         } catch (\Exception $e) {
             Log::error('KCP: vbank notify failed', [
                 'tno' => $tno, 'order_no' => $orderNo, 'noti_id' => $notiId,
@@ -506,6 +544,8 @@ class PaymentCallbackController
 
             // 일시적 실패 (DB 등) — result != 0000 으로 KCP 재통보 유도
             return $this->kcpNotifyRetry();
+        } finally {
+            $this->releaseOrderCallbackLock($callbackLock);
         }
     }
 
