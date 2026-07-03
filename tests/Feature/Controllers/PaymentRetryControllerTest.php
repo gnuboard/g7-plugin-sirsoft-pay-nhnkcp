@@ -34,6 +34,8 @@ class PaymentRetryControllerTest extends PluginTestCase
             'total_due_amount' => $amount,
             'total_paid_amount' => 0,
             'order_meta' => $orderMeta,
+            'currency' => 'KRW',
+            'currency_snapshot' => self::krwCurrencySnapshot(),
         ]);
 
         OrderPaymentFactory::new()->create([
@@ -50,6 +52,24 @@ class PaymentRetryControllerTest extends PluginTestCase
         ]);
 
         return $order;
+    }
+
+    private static function krwCurrencySnapshot(): array
+    {
+        return [
+            'base_currency' => 'KRW',
+            'order_currency' => 'KRW',
+            'base_unit' => 1,
+            'exchange_rates' => [
+                'KRW' => [
+                    'rate' => 1,
+                    'rounding_unit' => '1',
+                    'rounding_method' => 'round',
+                    'decimal_places' => 0,
+                    'base_unit' => 1,
+                ],
+            ],
+        ];
     }
 
     public function test_retry_returns_ready_for_pending_order(): void

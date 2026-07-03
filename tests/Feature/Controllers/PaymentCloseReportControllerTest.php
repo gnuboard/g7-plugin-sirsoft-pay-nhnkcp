@@ -163,8 +163,27 @@ class PaymentCloseReportControllerTest extends PluginTestCase
         $order->order_number = $orderNumber;
         $order->order_status = OrderStatusEnum::PENDING_ORDER;
         $order->currency = 'KRW';
+        $order->currency_snapshot = self::krwCurrencySnapshot();
         $order->total_due_amount = $amount;
 
         return $order;
+    }
+
+    private static function krwCurrencySnapshot(): array
+    {
+        return [
+            'base_currency' => 'KRW',
+            'order_currency' => 'KRW',
+            'base_unit' => 1,
+            'exchange_rates' => [
+                'KRW' => [
+                    'rate' => 1,
+                    'rounding_unit' => '1',
+                    'rounding_method' => 'round',
+                    'decimal_places' => 0,
+                    'base_unit' => 1,
+                ],
+            ],
+        ];
     }
 }

@@ -41,6 +41,8 @@ class MobileApprovalControllerTest extends PluginTestCase
             'total_tax_amount'     => $taxable,
             'total_vat_amount'     => $vat,
             'total_tax_free_amount'=> $taxFree,
+            'currency'             => 'KRW',
+            'currency_snapshot'    => self::krwCurrencySnapshot(),
         ]);
 
         OrderPaymentFactory::new()->create([
@@ -51,6 +53,24 @@ class MobileApprovalControllerTest extends PluginTestCase
         ]);
 
         return $order;
+    }
+
+    private static function krwCurrencySnapshot(): array
+    {
+        return [
+            'base_currency' => 'KRW',
+            'order_currency' => 'KRW',
+            'base_unit' => 1,
+            'exchange_rates' => [
+                'KRW' => [
+                    'rate' => 1,
+                    'rounding_unit' => '1',
+                    'rounding_method' => 'round',
+                    'decimal_places' => 0,
+                    'base_unit' => 1,
+                ],
+            ],
+        ];
     }
 
     private function mockSoapService(string $approvalKey = 'TEST_APPROVAL_KEY'): void
