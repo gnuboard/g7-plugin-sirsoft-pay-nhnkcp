@@ -102,6 +102,29 @@ class PaymentCallbackController
         'use_pay_method',
     ];
 
+    private const EASY_PAY_METHODS = [
+        'nhnkcp_payco' => [
+            'provider' => 'payco',
+            'label' => ['ko' => 'PAYCO (페이코)', 'en' => 'PAYCO'],
+        ],
+        'nhnkcp_naverpay' => [
+            'provider' => 'naverpay',
+            'label' => ['ko' => '네이버페이', 'en' => 'NaverPay'],
+        ],
+        'nhnkcp_naverpay_point' => [
+            'provider' => 'naverpay_point',
+            'label' => ['ko' => '네이버페이 포인트결제', 'en' => 'NaverPay Point'],
+        ],
+        'nhnkcp_kakaopay' => [
+            'provider' => 'kakaopay',
+            'label' => ['ko' => '카카오페이', 'en' => 'KakaoPay'],
+        ],
+        'nhnkcp_applepay' => [
+            'provider' => 'applepay',
+            'label' => ['ko' => '애플페이', 'en' => 'Apple Pay'],
+        ],
+    ];
+
     public function __construct(
         private readonly OrderProcessingService $orderService,
         private readonly PluginSettingsService $pluginSettingsService,
@@ -203,6 +226,15 @@ class PaymentCallbackController
                 $order = $order->fresh('payment') ?? $order;
             }
 
+            if (($order->payment?->isPaid() ?? false) || $order->order_status === OrderStatusEnum::PAYMENT_COMPLETE) {
+                Log::info('KCP: authCallback already paid order, skipping CLI approval', [
+                    'ordr_idxx' => $ordrIdxx,
+                    'transaction_id' => $order->payment?->transaction_id,
+                ]);
+
+                return redirect($this->resolveSuccessUrl($ordrIdxx));
+            }
+
             $expectedAmount = $this->expectedPaymentPrice($order);
             if (! $this->isKrwOrder($order)) {
                 Log::warning('KCP: unsupported order currency', [
@@ -292,6 +324,7 @@ class PaymentCallbackController
             $approvedAmtForCancel = $approvedAmt;
 
             $isEscrow = ($pgResponse['escw_yn'] ?? '') === 'Y';
+            $easyPayMeta = $this->resolveEasyPayMeta($validated);
 
             // 4단계: 주문 완료 처리
             $this->orderService->completePayment($order, [
@@ -301,11 +334,16 @@ class PaymentCallbackController
                 'card_name' => $pgResponse['card_name'] ?? $pgResponse['bank_name'] ?? null,
                 'card_installment_months' => (int) ($pgResponse['quota'] ?? 0),
                 'is_interest_free' => false,
-                'embedded_pg_provider' => null,
+                'embedded_pg_provider' => $easyPayMeta['provider'] ?? null,
                 'receipt_url' => null,
                 'payment_meta' => [
                     'res_cd' => $pgResCd,
                     ...$this->currentCredentialMeta(),
+                    ...($easyPayMeta === [] ? [] : [
+                        'nhnkcp_easy_pay_method' => $easyPayMeta['method'],
+                        'nhnkcp_easy_pay_provider' => $easyPayMeta['provider'],
+                        'nhnkcp_easy_pay_label' => $easyPayMeta['label'],
+                    ]),
                     'use_pay_method' => $validated['use_pay_method'] ?? $pgResponse['use_pay_method'] ?? null,
                     'app_time' => $pgResponse['app_time'] ?? null,
                     'bank_name' => $pgResponse['bank_name'] ?? null,
@@ -745,6 +783,25 @@ class PaymentCallbackController
         return [
             'site_cd' => $siteCd !== '' ? $siteCd : $this->apiService->getSiteCd(),
             'is_test_mode' => $this->apiService->isTestMode(),
+        ];
+    }
+
+    /**
+     * @return array{method: string, provider: string, label: array{ko: string, en: string}}|array{}
+     */
+    private function resolveEasyPayMeta(array $payload): array
+    {
+        $method = strtolower(trim((string) ($payload['nhnkcp_easy_pay_method'] ?? $payload['param_opt_1'] ?? '')));
+        if (! isset(self::EASY_PAY_METHODS[$method])) {
+            return [];
+        }
+
+        $definition = self::EASY_PAY_METHODS[$method];
+
+        return [
+            'method' => $method,
+            'provider' => $definition['provider'],
+            'label' => $definition['label'],
         ];
     }
 

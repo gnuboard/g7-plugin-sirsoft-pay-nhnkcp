@@ -276,7 +276,9 @@ class MobileApprovalControllerTest extends PluginTestCase
             ->postJson(self::APPROVAL_KEY_ENDPOINT, $this->approvalKeyPayload($order, ['pay_method' => 'nhnkcp_naverpay']));
 
         $response->assertOk()
-            ->assertJsonPath('data.fields.naverpay_direct', 'Y');
+            ->assertJsonPath('data.fields.naverpay_direct', 'Y')
+            ->assertJsonPath('data.fields.param_opt_1', 'nhnkcp_naverpay')
+            ->assertJsonPath('data.fields.nhnkcp_easy_pay_method', 'nhnkcp_naverpay');
     }
 
     public function test_kakaopay_easy_pay_includes_direct_field(): void

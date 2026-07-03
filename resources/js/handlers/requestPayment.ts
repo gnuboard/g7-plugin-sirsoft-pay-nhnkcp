@@ -120,6 +120,18 @@ const KCP_EASY_PAY_DIRECT: Record<string, Record<string, string>> = {
     nhnkcp_applepay:       { applepay_direct: 'Y' },
 };
 
+export function buildKcpEasyPayReturnFields(paymentMethod: string, isEasyPay: boolean): Record<string, string> {
+    const methodKey = paymentMethod.toLowerCase();
+    if (!isEasyPay || !Object.prototype.hasOwnProperty.call(KCP_EASY_PAY_DIRECT, methodKey)) {
+        return {};
+    }
+
+    return {
+        param_opt_1: methodKey,
+        nhnkcp_easy_pay_method: methodKey,
+    };
+}
+
 function isKcpPaymentFrameClosed(iframe: HTMLIFrameElement): boolean {
     if (!iframe.isConnected) {
         return true;
@@ -408,6 +420,7 @@ async function handlePcPayment(
     };
 
     Object.assign(fields, buildKcpTaxFields(pgPaymentData));
+    Object.assign(fields, buildKcpEasyPayReturnFields(paymentMethod, isEasyPay));
 
     // 가상계좌 전용 파라미터
     if (payMethod === '001000000000') {

@@ -130,10 +130,13 @@ class PaymentCallbackControllerTest extends PluginTestCase
      * NhnKcpApiService::approvePayment() 를 exec() 없이 mock.
      * 기존 테스트는 Http::fake()로 CLI exec를 막으려 했으나 동작하지 않음.
      */
-    private function mockApiService(array $cliResponse): void
+    private function mockApiService(array $cliResponse, ?int $approveCalls = null): void
     {
         $mock = $this->createMock(NhnKcpApiService::class);
-        $mock->method('approvePayment')->willReturn($cliResponse);
+        $expectation = $approveCalls === null
+            ? $mock->method('approvePayment')
+            : $mock->expects($this->exactly($approveCalls))->method('approvePayment');
+        $expectation->willReturn($cliResponse);
         $this->app->instance(NhnKcpApiService::class, $mock);
     }
 
@@ -199,6 +202,72 @@ class PaymentCallbackControllerTest extends PluginTestCase
         $payment->refresh();
         $this->assertEquals($tno, $payment->transaction_id);
         $this->assertEquals('APP12345', $payment->card_approval_number);
+    }
+
+    public function test_auth_callback_stores_easy_pay_method_meta(): void
+    {
+        $order = $this->createTestOrder(50000);
+        $this->mockPluginSettings();
+
+        $tno = 'KCP_TNO_NAVERPAY';
+        $this->mockApiService($this->makeCliResponse($tno, $order->order_number, 50000));
+
+        $response = $this->post(
+            '/plugins/sirsoft-pay_nhnkcp/payment/callback',
+            $this->makeCallbackParams($order->order_number, 50000, [
+                'tno' => $tno,
+                'param_opt_1' => 'nhnkcp_naverpay',
+                'nhnkcp_easy_pay_method' => 'nhnkcp_naverpay',
+            ])
+        );
+
+        $response->assertRedirect("/shop/orders/{$order->order_number}/complete");
+
+        $payment = $order->payment;
+        $payment->refresh();
+        $meta = $payment->payment_meta;
+
+        $this->assertSame('naverpay', $payment->embedded_pg_provider);
+        $this->assertSame('nhnkcp_naverpay', $meta['nhnkcp_easy_pay_method'] ?? null);
+        $this->assertSame('naverpay', $meta['nhnkcp_easy_pay_provider'] ?? null);
+        $this->assertSame('네이버페이', $meta['nhnkcp_easy_pay_label']['ko'] ?? null);
+        $this->assertSame('NaverPay', $meta['nhnkcp_easy_pay_label']['en'] ?? null);
+    }
+
+    public function test_auth_callback_skips_cli_approval_when_order_already_paid(): void
+    {
+        $order = $this->createTestOrder(50000);
+        $this->mockPluginSettings();
+
+        $existingTno = 'KCP_TNO_ALREADY_PAID';
+        $order->update([
+            'order_status' => OrderStatusEnum::PAYMENT_COMPLETE,
+            'paid_at' => now(),
+            'total_paid_amount' => 50000,
+            'total_due_amount' => 0,
+        ]);
+        $order->payment->update([
+            'payment_status' => PaymentStatusEnum::PAID,
+            'paid_at' => now(),
+            'paid_amount_local' => 50000,
+            'paid_amount_base' => 50000,
+            'transaction_id' => $existingTno,
+            'card_approval_number' => 'APP_ALREADY',
+        ]);
+
+        $this->mockApiService($this->makeCliResponse('KCP_TNO_SHOULD_NOT_APPROVE', $order->order_number, 50000), 0);
+
+        $response = $this->post(
+            '/plugins/sirsoft-pay_nhnkcp/payment/callback',
+            $this->makeCallbackParams($order->order_number, 50000, ['tno' => $existingTno])
+        );
+
+        $response->assertRedirect("/shop/orders/{$order->order_number}/complete");
+
+        $payment = $order->payment;
+        $payment->refresh();
+        $this->assertSame($existingTno, $payment->transaction_id);
+        $this->assertSame('APP_ALREADY', $payment->card_approval_number);
     }
 
     public function test_auth_callback_rejects_browser_amount_mismatch_before_cli_approval(): void

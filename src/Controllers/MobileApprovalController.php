@@ -190,6 +190,7 @@ class MobileApprovalController
                 if (isset(self::EASY_PAY_DIRECT_FIELDS[$payMethodKey])) {
                     $fields = [...$fields, ...self::EASY_PAY_DIRECT_FIELDS[$payMethodKey]];
                 }
+                $fields = [...$fields, ...$this->buildEasyPayReturnFields($payMethodKey)];
             }
 
             return response()->json([
@@ -240,6 +241,21 @@ class MobileApprovalController
             'comm_tax_mny'  => (string) $supplyAmt,
             'comm_vat_mny'  => (string) $vatAmt,
             'comm_free_mny' => (string) $taxFreeAmt,
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function buildEasyPayReturnFields(string $payMethodKey): array
+    {
+        if (! isset(self::EASY_PAY_DIRECT_FIELDS[$payMethodKey])) {
+            return [];
+        }
+
+        return [
+            'param_opt_1' => $payMethodKey,
+            'nhnkcp_easy_pay_method' => $payMethodKey,
         ];
     }
 
