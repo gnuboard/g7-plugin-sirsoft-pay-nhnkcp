@@ -56,6 +56,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth:sanctum', 'admin'])->g
     Route::get('/orders/test-mode-map', [AdminOrderListController::class, 'testModeMap'])
         ->name('orders.test-mode-map');
 
+    // 간편결제 원 결제수단 표시 맵 (관리자 주문목록 보강용)
+    Route::get('/orders/easy-pay-display-map', [AdminOrderListController::class, 'easyPayDisplayMap'])
+        ->name('orders.easy-pay-display-map');
+
     // 주문번호로 거래 정보 조회 (레이아웃 확장 자동 로드용)
     Route::get('/orders/{orderNumber}/transaction-status', [AdminTransactionController::class, 'queryByOrder'])
         ->name('orders.transaction-status');

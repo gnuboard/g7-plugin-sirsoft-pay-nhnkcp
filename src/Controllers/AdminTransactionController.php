@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\Base\AdminBaseController;
 use App\Services\PluginSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Plugins\Sirsoft\PayNhnkcp\Concerns\ResolvesEasyPayDisplay;
 
 /**
  * NHN KCP 거래 정보 관리자 컨트롤러
@@ -18,6 +19,8 @@ use Illuminate\Support\Facades\DB;
  */
 class AdminTransactionController extends AdminBaseController
 {
+    use ResolvesEasyPayDisplay;
+
     private const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
 
     public function __construct(
@@ -46,7 +49,7 @@ class AdminTransactionController extends AdminBaseController
             ->where('p.pg_provider', 'nhnkcp')
             ->whereNotNull('p.transaction_id')
             ->where('p.transaction_id', '!=', '')
-            ->select(['p.transaction_id', 'p.payment_meta', 'p.payment_method'])
+            ->select(['p.transaction_id', 'p.payment_meta', 'p.payment_method', 'p.embedded_pg_provider'])
             ->first();
 
         if (! $payment) {
@@ -56,8 +59,9 @@ class AdminTransactionController extends AdminBaseController
         $settings = $this->pluginSettingsService->get(self::PLUGIN_IDENTIFIER) ?? [];
         $isTest = (bool) ($settings['is_test_mode'] ?? true);
 
-        $meta = $payment->payment_meta ? json_decode($payment->payment_meta, true) : [];
+        $meta = $this->decodePaymentMeta($payment->payment_meta ?? null);
         $rawResponse = $meta['pg_raw_response'] ?? [];
+        $display = $this->resolvePaymentDisplay($payment);
 
         return ResponseHelper::success('messages.success', [
             'tno'            => $payment->transaction_id,
@@ -69,6 +73,11 @@ class AdminTransactionController extends AdminBaseController
             'account'        => $meta['account'] ?? null,
             'bank_name'      => $rawResponse['bank_name'] ?? $meta['bank_name'] ?? null,
             '_is_test_mode'  => $isTest,
+            '_base_pay_method_label' => $display['payment_method_label'],
+            '_embedded_pg_provider' => $display['embedded_pg_provider'],
+            '_embedded_pg_provider_label' => $display['embedded_pg_provider_label'],
+            '_pay_method_label' => $display['payment_method_display_label'],
+            'payment_method_display_label' => $display['payment_method_display_label'],
         ]);
     }
 }

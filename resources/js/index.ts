@@ -5,6 +5,7 @@ import { installMypageOrderShowInjector } from './mypageOrderShowInjector';
 import { installCheckoutEasyPayInjector } from './checkoutEasyPayInjector';
 import { installAdminApplePayNoticeInjector } from './adminApplePayNoticeInjector';
 import { installAdminPaymentMethodBrandInjector } from './adminPaymentMethodBrandInjector';
+import { installAdminOrderPaymentDisplayInjector } from './adminOrderPaymentDisplayInjector';
 
 class KcpReceiptPopup {
     constructor(params: { url?: string; cash_url?: string }) {
@@ -100,6 +101,7 @@ installMypageOrderShowInjector();
 installCheckoutEasyPayInjector();
 installAdminApplePayNoticeInjector();
 installAdminPaymentMethodBrandInjector();
+installAdminOrderPaymentDisplayInjector();
 initPlugin();
 
 (window as Record<string, unknown>).__SirsoftNhnkcp = {

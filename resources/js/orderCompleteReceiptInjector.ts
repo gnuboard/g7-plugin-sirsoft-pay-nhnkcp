@@ -31,7 +31,13 @@ async function fetchPayment(orderNumber: string): Promise<Payment | null> {
     }
 }
 
-async function fetchReceiptUrl(orderNumber: string): Promise<{ receipt_url: string; cash_receipt_url: string | null } | null> {
+interface ReceiptInfo {
+    receipt_url: string;
+    cash_receipt_url: string | null;
+    payment_method_display_label?: string | null;
+}
+
+async function fetchReceiptUrl(orderNumber: string): Promise<ReceiptInfo | null> {
     const token = getToken();
     if (!token) return null;
 
@@ -40,7 +46,7 @@ async function fetchReceiptUrl(orderNumber: string): Promise<{ receipt_url: stri
             headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
         });
         if (!res.ok) return null;
-        return (await res.json()) as { receipt_url: string; cash_receipt_url: string | null };
+        return (await res.json()) as ReceiptInfo;
     } catch {
         return null;
     }
@@ -53,6 +59,34 @@ function makeBtn(text: string, classes: string, onClick: (btn: HTMLButtonElement
     btn.textContent = text;
     btn.addEventListener('click', () => onClick(btn));
     return btn;
+}
+
+function patchPaymentMethodDisplay(displayLabel: string | null | undefined): boolean {
+    if (!displayLabel) return false;
+
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('div'));
+    for (const row of rows) {
+        const spans = Array.from(row.children).filter(
+            (child): child is HTMLElement => child instanceof HTMLElement && child.tagName === 'SPAN',
+        );
+        if (spans.length < 2) continue;
+
+        const label = spans[0].textContent?.trim();
+        if (label !== '결제 방법' && label !== '결제수단' && label !== '결제 방식') continue;
+
+        const value = spans[spans.length - 1];
+        if (value.textContent?.trim() === displayLabel) {
+            row.dataset.nhnkcpPaymentMethodRow = 'true';
+            return true;
+        }
+
+        value.textContent = displayLabel;
+        value.dataset.nhnkcpPaymentMethodPatched = 'true';
+        row.dataset.nhnkcpPaymentMethodRow = 'true';
+        return true;
+    }
+
+    return false;
 }
 
 // 주문완료 페이지 버튼 영역에 영수증 버튼 주입
@@ -69,6 +103,9 @@ async function injectOnOrderComplete(orderNumber: string): Promise<void> {
         .find(b => b.className.includes('bg-blue-600'));
 
     if (!blueBtn?.parentElement) return;
+
+    const receiptInfo = await fetchReceiptUrl(orderNumber);
+    patchPaymentMethodDisplay(receiptInfo?.payment_method_display_label);
 
     const container = blueBtn.parentElement;
 

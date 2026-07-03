@@ -8,10 +8,13 @@ use App\Services\PluginSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Plugins\Sirsoft\PayNhnkcp\Concerns\ResolvesEasyPayDisplay;
 use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
 
 class UserReceiptController
 {
+    use ResolvesEasyPayDisplay;
+
     private const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
 
     // 카드/계좌이체 영수증 URL (cmd= 로 끝나므로 cmd 값을 바로 붙임)
@@ -56,6 +59,7 @@ class UserReceiptController
                 'p.transaction_id',
                 'p.payment_meta',
                 'p.payment_method',
+                'p.embedded_pg_provider',
                 'p.payment_device',
                 'p.paid_amount_local',
                 'o.order_number',
@@ -76,6 +80,7 @@ class UserReceiptController
         $orderNo = $payment->order_number;
         $tradeMony = (int) round((float) ($payment->paid_amount_local ?? 0));
         $method = $payment->payment_method ?? '';
+        $display = $this->resolvePaymentDisplay($payment);
 
         // 결제수단 분류 — KCP 영수증 cmd 는 결제수단(휴대폰결제 vs 그 외) 으로만 분기.
         // 디바이스(PC/모바일) 와 무관 — 모바일 디바이스에서 카드결제해도 card_bill 로 가야 함.
@@ -93,7 +98,7 @@ class UserReceiptController
         // 현금영수증 URL (계좌이체 · 가상계좌만 해당)
         $cashReceiptUrl = null;
         if ($isCashMethod) {
-            $meta = $payment->payment_meta ? json_decode($payment->payment_meta, true) : [];
+            $meta = $this->decodePaymentMeta($payment->payment_meta ?? null);
             $pgRaw = $meta['pg_raw_response'] ?? $meta;
             $authNo = $pgRaw['app_no'] ?? $pgRaw['receipt_no'] ?? $tno;
             $siteCd = $this->apiService->getSiteCd();
@@ -108,6 +113,11 @@ class UserReceiptController
             'receipt_url'      => $receiptUrl,
             'cash_receipt_url' => $cashReceiptUrl,
             'is_test_mode'     => $isTest,
+            'payment_method_label' => $display['payment_method_label'],
+            'payment_method_display_label' => $display['payment_method_display_label'],
+            'selected_payment_method' => $display['selected_payment_method'],
+            'embedded_pg_provider' => $display['embedded_pg_provider'],
+            'embedded_pg_provider_label' => $display['embedded_pg_provider_label'],
         ]);
     }
 }

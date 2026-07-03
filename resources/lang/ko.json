@@ -5,6 +5,7 @@
             "kcp_escrow_delivery": "에스크로 배송",
             "kcp_status": "결제 상태",
             "nhnkcp_easy_pay_config": "간편결제 설정",
+            "nhnkcp_easy_pay_display_map": "간편결제 표시 맵",
             "nhnkcp_test_map": "테스트 결제 맵",
             "nicepay_test_map": "테스트 결제 맵",
             "settings": "결제 설정",
