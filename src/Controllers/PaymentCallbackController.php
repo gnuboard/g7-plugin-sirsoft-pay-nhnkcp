@@ -16,7 +16,6 @@ use Modules\Sirsoft\Ecommerce\Enums\OrderStatusEnum;
 use Modules\Sirsoft\Ecommerce\Exceptions\PaymentAmountMismatchException;
 use Modules\Sirsoft\Ecommerce\Helpers\DeviceDetector;
 use Modules\Sirsoft\Ecommerce\Models\Order;
-use Modules\Sirsoft\Ecommerce\Services\CurrencyConversionService;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\PreventsReplayCallback;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\RecordsPaymentWindowClosure;
@@ -221,7 +220,17 @@ class PaymentCallbackController
                 return redirect($this->resolveSuccessUrl($ordrIdxx));
             }
 
-            $expectedAmount = $this->expectedPaymentPrice($order);
+            $expectedAmount = $this->resolveExpectedPaymentPriceOrNull($order, 'auth_callback', [
+                'ordr_idxx' => $ordrIdxx,
+                'good_mny' => $goodMny,
+            ]);
+            if ($expectedAmount === null) {
+                return redirect($this->resolveFailUrl([
+                    'error' => 'invalid_payment_currency',
+                    'orderId' => $ordrIdxx,
+                ]));
+            }
+
             if (! $this->isKrwOrder($order)) {
                 Log::warning('KCP: unsupported order currency', [
                     'ordr_idxx' => $ordrIdxx,
@@ -303,7 +312,7 @@ class PaymentCallbackController
             // base≠결제 통화(예: base JPY, 결제 KRW)에서도 PG 청구 통화와 단위가 일치한다.
             $approvedAmt = $goodMny > 0
                 ? $goodMny
-                : app(CurrencyConversionService::class)->resolveOrderPaymentChargeAmount($order);
+                : $expectedAmount;
 
             // PG 측 승인이 확정된 시점 — 후속 처리 실패 시 cancel 필요. catch 에서 참조.
             $approvedTno = $tno;
@@ -771,6 +780,10 @@ class PaymentCallbackController
         }
 
         $expectedAmount = $this->expectedVbankNotifyAmount($order);
+        if ($expectedAmount === null) {
+            return 'invalid_payment_currency';
+        }
+
         if ($amount !== $expectedAmount) {
             return 'amount_mismatch';
         }
@@ -778,7 +791,7 @@ class PaymentCallbackController
         return null;
     }
 
-    private function expectedVbankNotifyAmount(Order $order): int
+    private function expectedVbankNotifyAmount(Order $order): ?int
     {
         $payment = $order->payment;
         $paidAmount = (int) round((float) ($payment?->paid_amount_local ?? 0));
@@ -787,7 +800,9 @@ class PaymentCallbackController
             return $paidAmount;
         }
 
-        return $this->expectedPaymentPrice($order);
+        return $this->resolveExpectedPaymentPriceOrNull($order, 'vbank_notify', [
+            'transaction_id' => $payment?->transaction_id,
+        ]);
     }
 
     /**

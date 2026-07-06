@@ -74,6 +74,31 @@ class PaymentCloseReportControllerTest extends PluginTestCase
             ->assertJsonPath('errors.message.0', 'Payment amount does not match the order amount.');
     }
 
+    public function test_close_report_rejects_invalid_payment_currency_without_server_error(): void
+    {
+        $order = $this->makeOrder('ORD-KCP-CLOSE-CURRENCY-001', 10000);
+        $order->currency = 'USD';
+        $order->currency_snapshot = self::invalidUsdCurrencySnapshot();
+
+        $orderService = Mockery::mock(OrderProcessingService::class);
+        $orderService->shouldReceive('findByOrderNumber')
+            ->once()
+            ->with('ORD-KCP-CLOSE-CURRENCY-001')
+            ->andReturn($order);
+        $orderService->shouldNotReceive('failPayment');
+        $orderService->shouldNotReceive('recordPaymentCancellation');
+
+        $this->app->instance(OrderProcessingService::class, $orderService);
+
+        $response = $this->postJson('/api/plugins/sirsoft-pay_nhnkcp/payment/close-report', [
+            'oid' => 'ORD-KCP-CLOSE-CURRENCY-001',
+            'price' => 10000,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('errors.message.0', 'Payment currency is not chargeable.');
+    }
+
     public function test_close_report_rejects_buyer_mismatch(): void
     {
         $order = $this->makeOrder('ORD-KCP-CLOSE-003', 10000);
@@ -181,6 +206,31 @@ class PaymentCloseReportControllerTest extends PluginTestCase
                     'rounding_unit' => '1',
                     'rounding_method' => 'round',
                     'decimal_places' => 0,
+                    'base_unit' => 1,
+                ],
+            ],
+        ];
+    }
+
+    private static function invalidUsdCurrencySnapshot(): array
+    {
+        return [
+            'base_currency' => 'KRW',
+            'order_currency' => 'USD',
+            'base_unit' => 1000,
+            'exchange_rates' => [
+                'KRW' => [
+                    'rate' => 1,
+                    'rounding_unit' => '1',
+                    'rounding_method' => 'round',
+                    'decimal_places' => 0,
+                    'base_unit' => 1000,
+                ],
+                'USD' => [
+                    'rate' => 0,
+                    'rounding_unit' => '0.01',
+                    'rounding_method' => 'round',
+                    'decimal_places' => 2,
                     'base_unit' => 1,
                 ],
             ],

@@ -109,6 +109,31 @@ class PaymentCallbackControllerTest extends PluginTestCase
         ];
     }
 
+    private static function invalidUsdCurrencySnapshot(): array
+    {
+        return [
+            'base_currency' => 'KRW',
+            'order_currency' => 'USD',
+            'base_unit' => 1000,
+            'exchange_rates' => [
+                'KRW' => [
+                    'rate' => 1,
+                    'rounding_unit' => '1',
+                    'rounding_method' => 'round',
+                    'decimal_places' => 0,
+                    'base_unit' => 1000,
+                ],
+                'USD' => [
+                    'rate' => 0,
+                    'rounding_unit' => '0.01',
+                    'rounding_method' => 'round',
+                    'decimal_places' => 2,
+                    'base_unit' => 1,
+                ],
+            ],
+        ];
+    }
+
     private function mockPluginSettings(array $overrides = []): void
     {
         $defaults = [
@@ -312,6 +337,32 @@ class PaymentCallbackControllerTest extends PluginTestCase
 
         $order->refresh();
         $this->assertEquals(OrderStatusEnum::PENDING_ORDER, $order->order_status);
+    }
+
+    public function test_auth_callback_rejects_invalid_payment_currency_before_cli_approval(): void
+    {
+        $order = $this->createTestOrder(50000);
+        $order->update([
+            'currency' => 'USD',
+            'currency_snapshot' => self::invalidUsdCurrencySnapshot(),
+        ]);
+        $this->mockPluginSettings();
+
+        $mock = $this->createMock(NhnKcpApiService::class);
+        $mock->expects($this->never())->method('approvePayment');
+        $this->app->instance(NhnKcpApiService::class, $mock);
+
+        $response = $this->post(
+            '/plugins/sirsoft-pay_nhnkcp/payment/callback',
+            $this->makeCallbackParams($order->order_number, 50000)
+        );
+
+        $response->assertRedirect();
+        $this->assertStringContainsString('error=invalid_payment_currency', $response->headers->get('Location'));
+
+        $order->refresh();
+        $this->assertEquals(OrderStatusEnum::PENDING_ORDER, $order->order_status);
+        $this->assertEquals(PaymentStatusEnum::READY, $order->payment->payment_status);
     }
 
     public function test_auth_callback_stores_only_sanitized_pg_response_fields(): void

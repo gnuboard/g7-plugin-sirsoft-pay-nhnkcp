@@ -73,6 +73,31 @@ class MobileApprovalControllerTest extends PluginTestCase
         ];
     }
 
+    private static function invalidUsdCurrencySnapshot(): array
+    {
+        return [
+            'base_currency' => 'KRW',
+            'order_currency' => 'USD',
+            'base_unit' => 1000,
+            'exchange_rates' => [
+                'KRW' => [
+                    'rate' => 1,
+                    'rounding_unit' => '1',
+                    'rounding_method' => 'round',
+                    'decimal_places' => 0,
+                    'base_unit' => 1000,
+                ],
+                'USD' => [
+                    'rate' => 0,
+                    'rounding_unit' => '0.01',
+                    'rounding_method' => 'round',
+                    'decimal_places' => 2,
+                    'base_unit' => 1,
+                ],
+            ],
+        ];
+    }
+
     private function mockSoapService(string $approvalKey = 'TEST_APPROVAL_KEY'): void
     {
         $mock = $this->createMock(KcpSoapService::class);
@@ -235,6 +260,24 @@ class MobileApprovalControllerTest extends PluginTestCase
 
         $response->assertUnprocessable()
             ->assertJsonPath('success', false);
+    }
+
+    public function test_get_approval_key_rejects_invalid_payment_currency_without_server_error(): void
+    {
+        $order = $this->createOrder(10000);
+        $order->update([
+            'currency' => 'USD',
+            'currency_snapshot' => self::invalidUsdCurrencySnapshot(),
+        ]);
+        $this->expectSoapServiceNotCalled();
+        $this->mockPluginSettings();
+
+        $response = $this->actingAs($order->user)
+            ->postJson(self::APPROVAL_KEY_ENDPOINT, $this->approvalKeyPayload($order, ['currency' => 'USD']));
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('error', 'Payment currency is not chargeable.');
     }
 
     public function test_get_approval_key_rejects_non_krw_order(): void
