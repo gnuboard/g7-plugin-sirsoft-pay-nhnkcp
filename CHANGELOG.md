@@ -4,6 +4,12 @@
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를 따르며,
 [Semantic Versioning](https://semver.org/lang/ko/)을 준수합니다.
 
+## [Unreleased]
+
+### Fixed
+
+- 비회원 NHN KCP 주문완료/주문상세에서 매출전표 조회가 인증 사용자 전용 라우트에 막히지 않도록 게스트 주문 토큰과 결제 성공 후 임시 영수증 쿠키 접근을 지원했습니다.
+
 ## [1.0.0-beta.5] - 2026-06-23
 
 ### Fixed

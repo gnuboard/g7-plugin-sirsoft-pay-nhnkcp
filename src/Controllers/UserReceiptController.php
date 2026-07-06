@@ -8,11 +8,14 @@ use App\Services\PluginSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Modules\Sirsoft\Ecommerce\Services\GuestOrderAuthService;
+use Plugins\Sirsoft\PayNhnkcp\Concerns\IssuesReceiptCookie;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\ResolvesEasyPayDisplay;
 use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
 
 class UserReceiptController
 {
+    use IssuesReceiptCookie;
     use ResolvesEasyPayDisplay;
 
     private const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
@@ -30,6 +33,7 @@ class UserReceiptController
     public function __construct(
         private readonly PluginSettingsService $pluginSettingsService,
         private readonly NhnKcpApiService $apiService,
+        private readonly GuestOrderAuthService $guestOrderAuthService,
     ) {}
 
     /**
@@ -41,20 +45,37 @@ class UserReceiptController
      * 결제 영수증 URL(신용카드)과 현금영수증 URL(현금/계좌이체)을 반환한다.
      * receipt_url 이 비어있으면 transaction_id (tno) 로 KCP 영수증 URL 을 동적 생성.
      *
-     * @param  Request  $request  인증된 사용자 요청
+     * @param  Request  $request  회원 또는 비회원 영수증 요청
      * @param  string  $orderNumber  주문번호
      * @return JsonResponse receipt_url / cash_receipt_url 또는 404
      */
     public function show(Request $request, string $orderNumber): JsonResponse
     {
         $user = $request->user();
-
-        $payment = DB::table('ecommerce_order_payments as p')
+        $query = DB::table('ecommerce_order_payments as p')
             ->join('ecommerce_orders as o', 'o.id', '=', 'p.order_id')
             ->where('o.order_number', $orderNumber)
-            ->where('o.user_id', $user->id)
             ->where('p.pg_provider', 'nhnkcp')
-            ->whereNotNull('p.transaction_id')
+            ->whereNotNull('p.transaction_id');
+
+        if ($user) {
+            $query->where('o.user_id', $user->id);
+        } else {
+            $order = $this->guestOrderAuthService->verifyToken($request->header('X-Guest-Order-Token'), $orderNumber);
+
+            if ($order) {
+                $query->whereNull('o.user_id')->where('o.id', $order->id);
+            } elseif ($this->verifyReceiptCookie($request->cookie(self::RECEIPT_COOKIE_NAME), $orderNumber)) {
+                $query->whereNull('o.user_id')
+                    ->where('o.id', function ($sub) use ($orderNumber) {
+                        $sub->select('id')->from('ecommerce_orders')->where('order_number', $orderNumber);
+                    });
+            } else {
+                return response()->json(['error' => 'Not found'], 404);
+            }
+        }
+
+        $payment = $query
             ->select([
                 'p.transaction_id',
                 'p.payment_meta',

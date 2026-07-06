@@ -18,6 +18,7 @@ use Modules\Sirsoft\Ecommerce\Helpers\DeviceDetector;
 use Modules\Sirsoft\Ecommerce\Models\Order;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\PreventsReplayCallback;
+use Plugins\Sirsoft\PayNhnkcp\Concerns\IssuesReceiptCookie;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\RecordsPaymentWindowClosure;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\ResolvesEasyPayDisplay;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\SanitizesPgResponse;
@@ -37,6 +38,7 @@ use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
 class PaymentCallbackController
 {
     use PreventsReplayCallback;
+    use IssuesReceiptCookie;
     use RecordsPaymentWindowClosure;
     use ResolvesEasyPayDisplay;
     use SanitizesPgResponse;
@@ -217,6 +219,8 @@ class PaymentCallbackController
                     'transaction_id' => $order->payment?->transaction_id,
                 ]);
 
+                $this->queueReceiptCookie($ordrIdxx);
+
                 return redirect($this->resolveSuccessUrl($ordrIdxx));
             }
 
@@ -302,6 +306,7 @@ class PaymentCallbackController
             // Replay 가드: 동일 tno 가 이미 paid 상태면 중복 처리하지 않고 성공 페이지로 복귀
             if ($this->wasAlreadyPaid($tno)) {
                 $this->logReplayDetected($tno, $ordrIdxx, 'authCallback (card)');
+                $this->queueReceiptCookie($ordrIdxx);
 
                 return redirect($this->resolveSuccessUrl($ordrIdxx));
             }
@@ -359,6 +364,8 @@ class PaymentCallbackController
             // (기본 PG가 타 PG일 때 주문이 해당 PG provider로 생성되는 경우 대비)
             $order->payment()->update(['pg_provider' => 'nhnkcp']);
 
+            $this->queueReceiptCookie($ordrIdxx);
+
             return redirect($this->resolveSuccessUrl($ordrIdxx));
 
         } catch (LockTimeoutException $e) {
@@ -369,6 +376,8 @@ class PaymentCallbackController
             $latestOrder = $this->orderService->findByOrderNumber($ordrIdxx);
             if (($latestOrder?->payment?->isPaid() ?? false)
                 || $latestOrder?->order_status === OrderStatusEnum::PAYMENT_COMPLETE) {
+                $this->queueReceiptCookie($ordrIdxx);
+
                 return redirect($this->resolveSuccessUrl($ordrIdxx));
             }
 
@@ -739,6 +748,8 @@ class PaymentCallbackController
                 'orderId' => $ordrIdxx,
             ]));
         }
+
+        $this->queueReceiptCookie($ordrIdxx);
 
         return redirect($this->resolveSuccessUrl($ordrIdxx));
     }

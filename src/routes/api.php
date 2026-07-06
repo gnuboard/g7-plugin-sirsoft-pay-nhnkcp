@@ -29,10 +29,11 @@ Route::post('/payment/close-report', [PaymentCloseReportController::class, 'stor
 Route::post('/payment/retry', [PaymentRetryController::class, 'store'])
     ->name('payment.retry');
 
-Route::middleware(['auth:sanctum'])->group(function () {
-    Route::get('/user/orders/{orderNumber}/receipt', [UserReceiptController::class, 'show'])
-        ->name('user.orders.receipt');
+Route::get('/user/orders/{orderNumber}/receipt', [UserReceiptController::class, 'show'])
+    ->middleware('optional.sanctum')
+    ->name('user.orders.receipt');
 
+Route::middleware(['auth:sanctum'])->group(function () {
     // 테스트 모드 가상계좌 모의입금 정보 (입금대기 상태일 때만 데이터 반환)
     Route::get('/user/orders/{orderNumber}/vbank-mock-deposit-info', [UserVbankMockDepositController::class, 'show'])
         ->name('user.orders.vbank-mock-deposit-info');
