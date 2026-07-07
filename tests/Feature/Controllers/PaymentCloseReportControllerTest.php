@@ -156,8 +156,10 @@ class PaymentCloseReportControllerTest extends PluginTestCase
 
     public function test_close_report_ignores_order_when_payment_already_paid(): void
     {
-        // race 재현: 승인 콜백이 payment 를 먼저 PAID 로 갱신했으나 order_status 는 아직 PENDING_ORDER.
-        $order = $this->makeOrder('ORD-KCP-CLOSE-PAID-001', 10000);
+        // race 재현: 승인 콜백이 payment 를 PAID 로 갱신했고 결제 예정액은 이미 0원이 됐으나,
+        // order_status 관계가 아직 PENDING_ORDER 로 관측되는 순간에도 close-report 는 금액 불일치가
+        // 아니라 결제 성공으로 판단해 무시해야 한다.
+        $order = $this->makeOrder('ORD-KCP-CLOSE-PAID-001', 0);
         $order->setRelation('payment', new OrderPayment([
             'payment_status' => PaymentStatusEnum::PAID,
         ]));
