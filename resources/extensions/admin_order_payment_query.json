@@ -88,14 +88,35 @@
                                 {
                                     "type": "basic",
                                     "name": "Span",
-                                    "if": "{{kcp_status.data?.res_cd === '0000'}}",
+                                    "if": "{{kcp_status.data?.refund_status === 'completed' && (kcp_status.data?.payment_status === 'cancelled' || kcp_status.data?.payment_status === 'partial_cancelled')}}",
+                                    "props": { "className": "ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" },
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.pay_status_cancel_completed"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "if": "{{kcp_status.data?.payment_status === 'partial_cancelled' && kcp_status.data?.refund_status !== 'completed'}}",
+                                    "props": { "className": "ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300" },
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.pay_status_partial_cancelled"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "if": "{{kcp_status.data?.payment_status === 'cancelled' && kcp_status.data?.refund_status !== 'completed'}}",
+                                    "props": { "className": "ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" },
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.pay_status_cancelled"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "if": "{{kcp_status.data?.payment_status === 'paid' && kcp_status.data?.res_cd === '0000'}}",
                                     "props": { "className": "ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300" },
                                     "text": "$t:sirsoft-pay_nhnkcp.admin.pay_status_approved"
                                 },
                                 {
                                     "type": "basic",
                                     "name": "Span",
-                                    "if": "{{kcp_status.data?.res_cd !== '0000'}}",
+                                    "if": "{{!(kcp_status.data?.refund_status === 'completed' && (kcp_status.data?.payment_status === 'cancelled' || kcp_status.data?.payment_status === 'partial_cancelled')) && kcp_status.data?.payment_status !== 'cancelled' && kcp_status.data?.payment_status !== 'partial_cancelled' && !(kcp_status.data?.payment_status === 'paid' && kcp_status.data?.res_cd === '0000')}}",
                                     "props": { "className": "ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300" },
                                     "text": "$t:sirsoft-pay_nhnkcp.admin.pay_status_unknown"
                                 },
@@ -113,6 +134,18 @@
                             "name": "Div",
                             "props": { "className": "grid grid-cols-2 gap-x-4 gap-y-2 text-xs" },
                             "children": [
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "props": { "className": "text-gray-500 dark:text-gray-400" },
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.result_payment_status"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "props": { "className": "text-gray-900 dark:text-gray-100" },
+                                    "text": "{{kcp_status.data?.payment_status_label ?? '-'}}"
+                                },
                                 {
                                     "type": "basic",
                                     "name": "Span",
@@ -172,6 +205,62 @@
                                     "name": "Span",
                                     "props": { "className": "font-mono text-gray-900 dark:text-gray-100" },
                                     "text": "{{kcp_status.data?.res_cd ?? '-'}}"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "if": "{{(kcp_status.data?.cancelled_amount ?? 0) > 0}}",
+                                    "props": { "className": "text-gray-500 dark:text-gray-400" },
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.result_cancelled_amount"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "if": "{{(kcp_status.data?.cancelled_amount ?? 0) > 0}}",
+                                    "props": { "className": "font-mono text-gray-900 dark:text-gray-100" },
+                                    "text": "{{kcp_status.data?.cancelled_amount_formatted ?? '-'}}"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "if": "{{!!kcp_status.data?.cancelled_at}}",
+                                    "props": { "className": "text-gray-500 dark:text-gray-400" },
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.result_cancelled_at"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "if": "{{!!kcp_status.data?.cancelled_at}}",
+                                    "props": { "className": "font-mono text-gray-900 dark:text-gray-100" },
+                                    "text": "{{kcp_status.data?.cancelled_at ?? '-'}}"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "if": "{{!!kcp_status.data?.refund_status}}",
+                                    "props": { "className": "text-gray-500 dark:text-gray-400" },
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.result_refund_status"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "if": "{{!!kcp_status.data?.refund_status}}",
+                                    "props": { "className": "text-gray-900 dark:text-gray-100" },
+                                    "text": "{{kcp_status.data?.refund_status_label ?? kcp_status.data?.refund_status ?? '-'}}"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "if": "{{!!kcp_status.data?.refund_number}}",
+                                    "props": { "className": "text-gray-500 dark:text-gray-400" },
+                                    "text": "$t:sirsoft-pay_nhnkcp.admin.result_refund_number"
+                                },
+                                {
+                                    "type": "basic",
+                                    "name": "Span",
+                                    "if": "{{!!kcp_status.data?.refund_number}}",
+                                    "props": { "className": "font-mono text-gray-900 dark:text-gray-100 break-all" },
+                                    "text": "{{kcp_status.data?.refund_number ?? '-'}}"
                                 }
                             ]
                         }

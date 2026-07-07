@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\Base\AdminBaseController;
 use App\Services\PluginSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Modules\Sirsoft\Ecommerce\Enums\PaymentStatusEnum;
+use Modules\Sirsoft\Ecommerce\Enums\RefundStatusEnum;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\ResolvesEasyPayDisplay;
 
 /**
@@ -49,7 +51,18 @@ class AdminTransactionController extends AdminBaseController
             ->where('p.pg_provider', 'nhnkcp')
             ->whereNotNull('p.transaction_id')
             ->where('p.transaction_id', '!=', '')
-            ->select(['p.transaction_id', 'p.payment_meta', 'p.payment_method', 'p.embedded_pg_provider'])
+            ->select([
+                'p.order_id',
+                'p.transaction_id',
+                'p.payment_meta',
+                'p.payment_method',
+                'p.embedded_pg_provider',
+                'p.payment_status',
+                'p.cancelled_amount',
+                'p.cancelled_at',
+                'p.cancel_history',
+                'p.currency',
+            ])
             ->first();
 
         if (! $payment) {
@@ -62,6 +75,15 @@ class AdminTransactionController extends AdminBaseController
         $meta = $this->decodePaymentMeta($payment->payment_meta ?? null);
         $rawResponse = $meta['pg_raw_response'] ?? [];
         $display = $this->resolvePaymentDisplay($payment);
+        $paymentStatus = is_string($payment->payment_status ?? null)
+            ? PaymentStatusEnum::tryFrom($payment->payment_status)
+            : null;
+        $refund = $this->latestRefundForOrder((int) $payment->order_id);
+        $refundStatus = is_string($refund->refund_status ?? null)
+            ? RefundStatusEnum::tryFrom($refund->refund_status)
+            : null;
+        $cancelledAmount = (float) ($payment->cancelled_amount ?? 0);
+        $refundAmount = $refund ? (float) ($refund->refund_amount ?? 0) : 0.0;
 
         return ResponseHelper::success('messages.success', [
             'tno'            => $payment->transaction_id,
@@ -73,11 +95,64 @@ class AdminTransactionController extends AdminBaseController
             'account'        => $meta['account'] ?? null,
             'bank_name'      => $rawResponse['bank_name'] ?? $meta['bank_name'] ?? null,
             '_is_test_mode'  => $isTest,
+            'payment_status' => $paymentStatus?->value ?? $payment->payment_status,
+            'payment_status_label' => $paymentStatus?->label(),
+            'payment_status_variant' => $paymentStatus?->variant(),
+            'cancelled_amount' => $cancelledAmount,
+            'cancelled_amount_formatted' => $this->formatKrwAmount($cancelledAmount),
+            'cancelled_at' => $payment->cancelled_at,
+            'cancel_history' => $this->decodeJsonArray($payment->cancel_history ?? null),
+            'refund_number' => $refund->refund_number ?? null,
+            'refund_status' => $refundStatus?->value ?? ($refund->refund_status ?? null),
+            'refund_status_label' => $refundStatus?->label(),
+            'refund_status_variant' => $refundStatus?->variant(),
+            'refund_amount' => $refundAmount,
+            'refund_amount_formatted' => $this->formatKrwAmount($refundAmount),
+            'refunded_at' => $refund->refunded_at ?? null,
+            'refund_pg_transaction_id' => $refund->pg_transaction_id ?? null,
             '_base_pay_method_label' => $display['payment_method_label'],
             '_embedded_pg_provider' => $display['embedded_pg_provider'],
             '_embedded_pg_provider_label' => $display['embedded_pg_provider_label'],
             '_pay_method_label' => $display['payment_method_display_label'],
             'payment_method_display_label' => $display['payment_method_display_label'],
         ]);
+    }
+
+    private function latestRefundForOrder(int $orderId): ?object
+    {
+        return DB::table('ecommerce_order_refunds')
+            ->where('order_id', $orderId)
+            ->orderByDesc('id')
+            ->select([
+                'refund_number',
+                'refund_status',
+                'refund_amount',
+                'pg_transaction_id',
+                'refunded_at',
+            ])
+            ->first();
+    }
+
+    private function formatKrwAmount(float $amount): string
+    {
+        return number_format((int) round($amount)).'원';
+    }
+
+    /**
+     * @return array<int|string, mixed>
+     */
+    private function decodeJsonArray(mixed $value): array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+
+        if (! is_string($value) || trim($value) === '') {
+            return [];
+        }
+
+        $decoded = json_decode($value, true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 }

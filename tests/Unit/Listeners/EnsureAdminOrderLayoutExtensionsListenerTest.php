@@ -62,6 +62,12 @@ class EnsureAdminOrderLayoutExtensionsListenerTest extends TestCase
         $this->assertIsString($json);
         $this->assertStringContainsString('kcp_status.data?._is_test_mode === true', $json);
         $this->assertStringContainsString('sirsoft-pay_nhnkcp.admin.order_info_title', $json);
+        $this->assertStringContainsString("kcp_status.data?.payment_status === 'cancelled'", $json);
+        $this->assertStringContainsString("kcp_status.data?.refund_status === 'completed'", $json);
+        $this->assertStringContainsString('sirsoft-pay_nhnkcp.admin.pay_status_cancel_completed', $json);
+        $this->assertStringContainsString('sirsoft-pay_nhnkcp.admin.result_payment_status', $json);
+        $this->assertStringContainsString('sirsoft-pay_nhnkcp.admin.result_cancelled_amount', $json);
+        $this->assertStringContainsString('sirsoft-pay_nhnkcp.admin.result_refund_status', $json);
     }
 
     public function test_detail_listener_uses_wrapper_when_tab_content_area_is_renamed(): void
