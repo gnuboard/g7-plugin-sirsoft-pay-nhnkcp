@@ -261,7 +261,7 @@ class NhnKcpApiServiceTest extends PluginTestCase
             $args = $this->capturedCliArgs($stub['log']);
             $this->assertStringContainsString('mod_type=RN07', $args);
             $this->assertStringContainsString('mod_mny=10000', $args);
-            $this->assertStringContainsString('rem_mny=40000', $args);
+            $this->assertStringContainsString('rem_mny=50000', $args);
         } finally {
             $this->removeStubbedCliDirectory($stub['dir']);
         }
