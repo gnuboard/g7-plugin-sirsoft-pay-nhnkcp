@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\AdminEscrowDeliveryController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\AdminOrderListController;
+use Plugins\Sirsoft\PayNhnkcp\Controllers\AdminSettingsStatusController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\AdminTransactionController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\HealthCheckController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\MobileApprovalController;
@@ -52,6 +53,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth:sanctum', 'admin'])->g
             'escrow_common_notify_url' => url('/plugins/sirsoft-pay_nhnkcp/payment/escrow-common-notify'),
         ],
     ]))->name('vbank.notify.url');
+
+    Route::get('/settings/test-mode-status', [AdminSettingsStatusController::class, 'testMode'])
+        ->middleware('permission:admin,sirsoft-ecommerce.settings.read')
+        ->name('settings.test-mode-status');
 
     // 테스트 모드 주문 맵 (관리자 주문목록 배지 표시용)
     Route::get('/orders/test-mode-map', [AdminOrderListController::class, 'testModeMap'])

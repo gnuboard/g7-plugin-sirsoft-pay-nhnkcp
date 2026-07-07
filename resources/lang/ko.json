@@ -4,6 +4,7 @@
             "health": "연동 상태",
             "kcp_escrow_delivery": "에스크로 배송",
             "kcp_status": "결제 상태",
+            "nhnkcp_test_mode_status": "테스트 모드 상태",
             "nhnkcp_easy_pay_config": "간편결제 설정",
             "nhnkcp_easy_pay_display_map": "간편결제 표시 맵",
             "nhnkcp_test_map": "테스트 결제 맵",
@@ -49,6 +50,10 @@
     "admin": {
         "test_mode_badge": "테스트 결제",
         "test_mode_order_notice": "이 주문은 테스트 결제로 처리되었습니다.",
+        "test_mode_settings_warning_plugin": "NHN KCP",
+        "test_mode_settings_warning_title": "(주의!) NHN KCP 결제 설정이 현재 테스트결제로 되어 있습니다.",
+        "test_mode_settings_warning_body": "테스트결제 시 실제 결제가 되지 않으므로, 쇼핑몰 운영 중이면 반드시 실결제로 설정하여 운영하세요.",
+        "test_mode_settings_warning_action": "실결제로 설정",
         "order_info_title": "NHN KCP 결제 정보",
         "order_info_description": "DB에 저장된 KCP 원승인 및 현재 결제 상태를 표시합니다.",
         "pay_status_approved": "승인",
