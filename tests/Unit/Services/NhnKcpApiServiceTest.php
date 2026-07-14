@@ -39,20 +39,27 @@ class NhnKcpApiServiceTest extends PluginTestCase
      */
     private function makeServiceWithStubbedCli(string $response, array $settingsOverrides = []): array
     {
+        // CLI 스텁은 `#!/bin/sh` 스크립트라 Windows exec() 가 실행하지 못한다
+        // (.exe 로 이름만 바꿔도 "not compatible with the version of Windows" 로 거부됨).
+        // Windows 분기(executeCliWindows)는 별도 검증 대상이므로 여기서는 건너뛴다.
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('Linux CLI 스텁 기반 테스트 — Windows 분기 별도 검증.');
+        }
+
         $service = $this->makeService($settingsOverrides);
-        $dir = sys_get_temp_dir() . '/nhnkcp_cli_' . uniqid('', true);
+        $dir = sys_get_temp_dir().'/nhnkcp_cli_'.uniqid('', true);
         $this->assertTrue(mkdir($dir), '임시 CLI 디렉터리 생성 실패');
 
-        $logPath = $dir . '/argv.log';
-        $responsePath = $dir . '/response.txt';
+        $logPath = $dir.'/argv.log';
+        $responsePath = $dir.'/response.txt';
         file_put_contents($responsePath, $response);
 
         $script = "#!/bin/sh\n"
-            . "printf '%s\\n' \"\$@\" > " . escapeshellarg($logPath) . "\n"
-            . 'cat ' . escapeshellarg($responsePath) . "\n";
+            ."printf '%s\\n' \"\$@\" > ".escapeshellarg($logPath)."\n"
+            .'cat '.escapeshellarg($responsePath)."\n";
 
         foreach (['pp_cli', 'pp_cli_x64'] as $binName) {
-            $binPath = $dir . '/' . $binName;
+            $binPath = $dir.'/'.$binName;
             file_put_contents($binPath, $script);
             chmod($binPath, 0755);
         }
@@ -71,7 +78,7 @@ class NhnKcpApiServiceTest extends PluginTestCase
 
     private function removeStubbedCliDirectory(string $dir): void
     {
-        foreach (glob($dir . '/*') ?: [] as $path) {
+        foreach (glob($dir.'/*') ?: [] as $path) {
             @unlink($path);
         }
 
@@ -197,7 +204,7 @@ class NhnKcpApiServiceTest extends PluginTestCase
 
         $service->getTransaction('TNO_001', 'ORD-001');
 
-        $expectedAuthValue = 'Basic ' . base64_encode(self::TEST_SITE_CD . ':' . self::TEST_SITE_KEY);
+        $expectedAuthValue = 'Basic '.base64_encode(self::TEST_SITE_CD.':'.self::TEST_SITE_KEY);
 
         Http::assertSent(function ($request) use ($expectedAuthValue) {
             return $request->header('Authorization')[0] === $expectedAuthValue;
@@ -221,7 +228,7 @@ class NhnKcpApiServiceTest extends PluginTestCase
     public function test_cancel_payment_calls_cli_with_full_cancel_params(): void
     {
         $stub = $this->makeServiceWithStubbedCli(
-            'res_cd=0000' . chr(31) . 'res_msg=취소완료' . chr(31) . 'tno=KCP_TNO_CANCEL_001'
+            'res_cd=0000'.chr(31).'res_msg=취소완료'.chr(31).'tno=KCP_TNO_CANCEL_001'
         );
         /** @var NhnKcpApiService $service */
         $service = $stub['service'];
@@ -238,10 +245,10 @@ class NhnKcpApiServiceTest extends PluginTestCase
 
             $args = $this->capturedCliArgs($stub['log']);
             $this->assertStringContainsString('tx_cd=00200000', $args);
-            $this->assertStringContainsString('ordr_idxx=' . $ordrIdxx, $args);
-            $this->assertStringContainsString('modx_data=mod_data=tno=' . $tno, $args);
+            $this->assertStringContainsString('ordr_idxx='.$ordrIdxx, $args);
+            $this->assertStringContainsString('modx_data=mod_data=tno='.$tno, $args);
             $this->assertStringContainsString('mod_type=STSC', $args);
-            $this->assertStringContainsString('mod_desc=' . $cancelMsg, $args);
+            $this->assertStringContainsString('mod_desc='.$cancelMsg, $args);
             $this->assertStringNotContainsString('mod_mny=', $args);
             $this->assertStringNotContainsString('rem_mny=', $args);
         } finally {
@@ -251,7 +258,7 @@ class NhnKcpApiServiceTest extends PluginTestCase
 
     public function test_cancel_payment_calls_cli_with_partial_cancel_params(): void
     {
-        $stub = $this->makeServiceWithStubbedCli('res_cd=0000' . chr(31) . 'res_msg=부분취소완료');
+        $stub = $this->makeServiceWithStubbedCli('res_cd=0000'.chr(31).'res_msg=부분취소완료');
         /** @var NhnKcpApiService $service */
         $service = $stub['service'];
 
@@ -270,7 +277,7 @@ class NhnKcpApiServiceTest extends PluginTestCase
     public function test_register_escrow_delivery_uses_test_site_cd_when_escrow_test_site_cd_is_empty(): void
     {
         $stub = $this->makeServiceWithStubbedCli(
-            'res_cd=0000' . chr(31) . 'res_msg=배송등록완료',
+            'res_cd=0000'.chr(31).'res_msg=배송등록완료',
             ['escrow_test_site_cd' => '']
         );
         /** @var NhnKcpApiService $service */
@@ -280,7 +287,7 @@ class NhnKcpApiServiceTest extends PluginTestCase
             $service->registerEscrowDelivery('TNO_ESCROW', 'ORD-ESCROW', '1234567890', '04');
 
             $args = $this->capturedCliArgs($stub['log']);
-            $this->assertStringContainsString('site_cd=' . self::TEST_SITE_CD, $args);
+            $this->assertStringContainsString('site_cd='.self::TEST_SITE_CD, $args);
         } finally {
             $this->removeStubbedCliDirectory($stub['dir']);
         }
@@ -288,7 +295,7 @@ class NhnKcpApiServiceTest extends PluginTestCase
 
     public function test_cancel_payment_throws_on_non_0000_res_cd(): void
     {
-        $stub = $this->makeServiceWithStubbedCli('res_cd=9999' . chr(31) . 'res_msg=취소 실패');
+        $stub = $this->makeServiceWithStubbedCli('res_cd=9999'.chr(31).'res_msg=취소 실패');
         /** @var NhnKcpApiService $service */
         $service = $stub['service'];
 
@@ -384,7 +391,7 @@ class NhnKcpApiServiceTest extends PluginTestCase
 
         $tmpFile = tempnam(sys_get_temp_dir(), 'kcp_cli_test_');
         $this->assertNotFalse($tmpFile);
-        file_put_contents($tmpFile, '#!/bin/sh' . PHP_EOL . 'exit 0' . PHP_EOL);
+        file_put_contents($tmpFile, '#!/bin/sh'.PHP_EOL.'exit 0'.PHP_EOL);
         chmod($tmpFile, 0664);
         $this->assertFalse(is_executable($tmpFile), 'precondition: 0664 는 실행 권한 없음');
 
@@ -411,7 +418,7 @@ class NhnKcpApiServiceTest extends PluginTestCase
 
         $tmpFile = tempnam(sys_get_temp_dir(), 'kcp_cli_test_');
         $this->assertNotFalse($tmpFile);
-        file_put_contents($tmpFile, '#!/bin/sh' . PHP_EOL . 'exit 0' . PHP_EOL);
+        file_put_contents($tmpFile, '#!/bin/sh'.PHP_EOL.'exit 0'.PHP_EOL);
         chmod($tmpFile, 0755);
 
         try {
@@ -435,10 +442,10 @@ class NhnKcpApiServiceTest extends PluginTestCase
         $method = (new \ReflectionClass($service))->getMethod('ensureCliExecutable');
         $method->setAccessible(true);
 
-        $this->expectException(\Plugins\Sirsoft\PayNhnkcp\Exceptions\NhnKcpApiException::class);
+        $this->expectException(NhnKcpApiException::class);
         $this->expectExceptionMessageMatches('/CLI 바이너리/');
 
-        $method->invoke($service, '/tmp/nonexistent_kcp_cli_' . uniqid());
+        $method->invoke($service, '/tmp/nonexistent_kcp_cli_'.uniqid());
     }
 
     /**
