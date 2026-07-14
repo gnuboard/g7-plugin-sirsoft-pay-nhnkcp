@@ -17,7 +17,7 @@ use Symfony\Component\HttpFoundation\Response;
  * (결제창 콜백 authCallback 은 브라우저 POST 라 IP 검증 안 함)
  *
  * 테스트 모드 (is_test_mode=true): 우회 — 개발 환경에서 KCP testadmin 외부 발신 IP
- *   에서 오는 모의입금 webhook 또는 PO 의 직접 테스트 시도를 허용 (그누보드5
+ *   에서 오는 모의입금 webhook 또는 개발자의 직접 테스트 시도를 허용 (그누보드5
  *   settle_kcp_common.php 의 $default['de_card_test'] 분기와 동일 정책).
  * 운영 모드 (is_test_mode=false): 화이트리스트 외 요청 403 차단.
  */
