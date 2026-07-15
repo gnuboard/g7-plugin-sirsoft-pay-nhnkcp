@@ -114,4 +114,73 @@ class RegisterEasyPayMethodsListenerTest extends TestCase
             $applepay['description']['ko'] ?? null,
         );
     }
+
+    /**
+     * @scenario mark_form=badge, requires_ios=false, device=ios
+     *
+     * @effects brand_mark_flows_to_cached, badge_renders_text_and_color
+     */
+    public function test_easy_pay_methods_carry_badge_brand_mark(): void
+    {
+        // 브랜드 마크(색 배지)를 카탈로그로 편입 — 과거 checkoutEasyPayInjector 가
+        // DOM 후처리로 주입하던 markText/markClassName 을 등록 데이터로 이관.
+        $listener = new RegisterEasyPayMethodsListener;
+
+        $methods = $listener->injectEasyPayMethods([
+            ['id' => 'phone'],
+            ['id' => 'point'],
+        ]);
+
+        $naverpay = collect($methods)->firstWhere('id', 'nhnkcp_naverpay');
+        $kakaopay = collect($methods)->firstWhere('id', 'nhnkcp_kakaopay');
+
+        $this->assertSame(['text' => 'N', 'class' => 'bg-green-500 text-white'], $naverpay['brand_mark'] ?? null);
+        $this->assertSame(['text' => 'K', 'class' => 'bg-yellow-400 text-gray-950'], $kakaopay['brand_mark'] ?? null);
+    }
+
+    /**
+     * @scenario mark_form=badge, requires_ios=true, device=ipados_desktop_ua
+     *
+     * @effects requires_ios_flag_carried
+     */
+    public function test_only_apple_pay_requires_ios(): void
+    {
+        // 애플페이만 iOS 전용 노출 플래그를 가진다(비-iOS 기기에서 체크아웃 레이아웃이 숨김).
+        $listener = new RegisterEasyPayMethodsListener;
+
+        $methods = $listener->injectEasyPayMethods([
+            ['id' => 'phone'],
+            ['id' => 'point'],
+        ]);
+
+        $applepay = collect($methods)->firstWhere('id', 'nhnkcp_applepay');
+        $naverpay = collect($methods)->firstWhere('id', 'nhnkcp_naverpay');
+
+        $this->assertTrue($applepay['requires_ios'] ?? false);
+        $this->assertArrayNotHasKey('requires_ios', $naverpay);
+    }
+
+    /**
+     * 브랜드 마크를 카탈로그로 편입하면서 체크아웃 DOM 인젝터를 제거했다.
+     * 인젝터 파일 부재 + index.ts 에 install 호출 부재를 구조로 확인한다.
+     * 결제 시점 방어(applePayDevice) 는 잔존한다.
+     *
+     * @scenario mark_form=badge, requires_ios=true, device=ios
+     *
+     * @effects injectors_removed, shared_helpers_preserved
+     */
+    public function test_checkout_easy_pay_injector_removed_but_shared_helpers_preserved(): void
+    {
+        $jsDir = base_path('plugins/_bundled/sirsoft-pay_nhnkcp/resources/js');
+
+        // 브랜드 인젝터 제거됨.
+        $this->assertFileDoesNotExist($jsDir.'/checkoutEasyPayInjector.ts');
+
+        // index.ts 에 install 호출 부재.
+        $indexTs = file_get_contents($jsDir.'/index.ts');
+        $this->assertStringNotContainsString('installCheckoutEasyPayInjector', $indexTs);
+
+        // 결제 시점 방어 헬퍼(applePayDevice)는 잔존 — requestPayment/orderResponseInterceptor 가 사용.
+        $this->assertFileExists($jsDir.'/support/applePayDevice.ts');
+    }
 }

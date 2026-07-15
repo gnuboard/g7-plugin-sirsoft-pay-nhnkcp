@@ -26,30 +26,38 @@ class RegisterEasyPayMethodsListener implements HookListenerInterface
             'name_key' => 'sirsoft-pay_nhnkcp::payment_methods.payco.name',
             'description_key' => 'sirsoft-pay_nhnkcp::payment_methods.payco.description',
             'icon' => 'wallet',
+            'brand_mark' => ['text' => 'P', 'class' => 'bg-red-500 text-white'],
         ],
         [
             'id' => 'nhnkcp_naverpay',
             'name_key' => 'sirsoft-pay_nhnkcp::payment_methods.naverpay.name',
             'description_key' => 'sirsoft-pay_nhnkcp::payment_methods.naverpay.description',
             'icon' => 'wallet',
+            'brand_mark' => ['text' => 'N', 'class' => 'bg-green-500 text-white'],
         ],
         [
             'id' => 'nhnkcp_naverpay_point',
             'name_key' => 'sirsoft-pay_nhnkcp::payment_methods.naverpay_point.name',
             'description_key' => 'sirsoft-pay_nhnkcp::payment_methods.naverpay_point.description',
             'icon' => 'wallet-cards',
+            'brand_mark' => ['text' => 'NP', 'class' => 'bg-green-600 text-white'],
         ],
         [
             'id' => 'nhnkcp_kakaopay',
             'name_key' => 'sirsoft-pay_nhnkcp::payment_methods.kakaopay.name',
             'description_key' => 'sirsoft-pay_nhnkcp::payment_methods.kakaopay.description',
             'icon' => 'message-circle',
+            'brand_mark' => ['text' => 'K', 'class' => 'bg-yellow-400 text-gray-950'],
         ],
         [
             'id' => 'nhnkcp_applepay',
             'name_key' => 'sirsoft-pay_nhnkcp::payment_methods.applepay.name',
             'description_key' => 'sirsoft-pay_nhnkcp::payment_methods.applepay.description',
             'icon' => 'smartphone',
+            'brand_mark' => ['text' => 'A', 'class' => 'bg-gray-900 text-white'],
+            // 애플페이는 iOS 기기에서만 결제 가능 — 비-iOS 기기에서는 체크아웃 레이아웃이
+            // 이 수단을 렌더하지 않는다(과거 checkoutEasyPayInjector 의 iOS 게이팅 이관).
+            'requires_ios' => true,
         ],
     ];
 
@@ -84,6 +92,8 @@ class RegisterEasyPayMethodsListener implements HookListenerInterface
                 nameKey: $method['name_key'],
                 descriptionKey: $method['description_key'],
                 icon: $method['icon'],
+                brandMark: $method['brand_mark'] ?? null,
+                requiresIos: $method['requires_ios'] ?? false,
             ),
             self::EASY_PAY_METHODS
         );
@@ -135,9 +145,19 @@ class RegisterEasyPayMethodsListener implements HookListenerInterface
         return $insertAfter;
     }
 
-    private function buildEntry(string $id, string $nameKey, string $descriptionKey, string $icon): array
-    {
-        return [
+    /**
+     * @param  array{text: string, class: string}|null  $brandMark  배지 브랜드 마크(텍스트+색상 클래스)
+     * @param  bool  $requiresIos  iOS 기기에서만 노출되는 수단 여부(애플페이)
+     */
+    private function buildEntry(
+        string $id,
+        string $nameKey,
+        string $descriptionKey,
+        string $icon,
+        ?array $brandMark = null,
+        bool $requiresIos = false,
+    ): array {
+        $entry = [
             'id' => $id,
             'name' => [
                 'ko' => __($nameKey, [], 'ko'),
@@ -163,5 +183,18 @@ class RegisterEasyPayMethodsListener implements HookListenerInterface
                 'mileage_deduction_timing' => 'payment_complete',
             ],
         ];
+
+        // 브랜드 마크(색 배지) — 레이아웃 BrandMark 컴포넌트가 text+class 로 렌더한다.
+        // 과거 checkoutEasyPayInjector 가 DOM 후처리로 주입하던 markText/markClassName 이관.
+        if ($brandMark !== null) {
+            $entry['brand_mark'] = $brandMark;
+        }
+
+        // iOS 전용 수단(애플페이)은 비-iOS 기기에서 체크아웃 레이아웃이 렌더하지 않는다.
+        if ($requiresIos) {
+            $entry['requires_ios'] = true;
+        }
+
+        return $entry;
     }
 }
