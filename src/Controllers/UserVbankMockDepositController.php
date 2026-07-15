@@ -69,7 +69,7 @@ class UserVbankMockDepositController
             return response()->json(['available' => false]);
         }
 
-        $isVbank = in_array($payment->payment_method?->value, ['vbank', 'virtual_account'], true);
+        $isVbank = $payment->isVirtualAccount();
 
         // 가상계좌 계좌번호가 발급됐고 아직 입금완료가 아닌 상태
         // (handleVbankIssued는 payment_status를 ready로 유지하므로 isPaid 역확인)
@@ -83,12 +83,12 @@ class UserVbankMockDepositController
             ?? (is_array($meta) ? ($meta['tno'] ?? '') : '');
 
         return response()->json([
-            'available'      => true,
-            'trade_no'       => $tradeNo,
-            'account_no'     => $payment->vbank_number,
-            'notify_url'     => url(self::VBANK_NOTIFY_PATH),
-            'mock_url'       => self::KCP_TEST_MOCK_URL,
-            'is_admin_view'  => $isAdmin,
+            'available' => true,
+            'trade_no' => $tradeNo,
+            'account_no' => $payment->vbank_number,
+            'notify_url' => url(self::VBANK_NOTIFY_PATH),
+            'mock_url' => self::KCP_TEST_MOCK_URL,
+            'is_admin_view' => $isAdmin,
         ]);
     }
 }

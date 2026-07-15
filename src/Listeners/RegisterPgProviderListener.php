@@ -54,6 +54,10 @@ class RegisterPgProviderListener implements HookListenerInterface
             'name' => localized_label(nameKey: 'sirsoft-pay_nhnkcp::provider.name'),
             'icon' => 'credit-card',
             'supported_methods' => ['card', 'bank_transfer', 'virtual_account', 'mobile'],
+            // 코어의 provider-agnostic 결제 진입 dispatch — 주문 응답의 pg_payment_handler 로
+            // 내려가 템플릿이 그대로 호출한다. 미선언 시 프론트가 응답을 변조해 결제창을
+            // 직접 띄우는 우회가 필요해진다(#475).
+            'payment_handler' => 'sirsoft-pay_nhnkcp.requestPayment',
         ];
 
         return $providers;
@@ -81,7 +85,7 @@ class RegisterPgProviderListener implements HookListenerInterface
         $liveSuffix = $settings['live_site_cd'] ?? '';
         $liveSiteCd = str_starts_with($liveSuffix, self::LIVE_SITE_CD_PREFIX)
             ? $liveSuffix
-            : self::LIVE_SITE_CD_PREFIX . $liveSuffix;
+            : self::LIVE_SITE_CD_PREFIX.$liveSuffix;
 
         $siteCd = $isTest
             ? ($settings['test_site_cd'] ?? 'T0000')
@@ -92,11 +96,11 @@ class RegisterPgProviderListener implements HookListenerInterface
             : 'https://pay.kcp.co.kr/plugin/payplus_web.jsp';
 
         $easyPayKeys = [
-            'PAYCO'         => 'easy_pay_payco',
-            'NAVERPAY'      => 'easy_pay_naverpay',
+            'PAYCO' => 'easy_pay_payco',
+            'NAVERPAY' => 'easy_pay_naverpay',
             'NAVERPAY POINT' => 'easy_pay_naverpay_point',
-            'KAKAOPAY'      => 'easy_pay_kakaopay',
-            'APPLEPAY'      => 'easy_pay_applepay',
+            'KAKAOPAY' => 'easy_pay_kakaopay',
+            'APPLEPAY' => 'easy_pay_applepay',
         ];
         $enabledEasyPays = array_values(array_keys(array_filter($easyPayKeys, fn ($key) => (bool) ($settings[$key] ?? false))));
 

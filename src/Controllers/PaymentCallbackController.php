@@ -17,13 +17,13 @@ use Modules\Sirsoft\Ecommerce\Exceptions\PaymentAmountMismatchException;
 use Modules\Sirsoft\Ecommerce\Helpers\DeviceDetector;
 use Modules\Sirsoft\Ecommerce\Models\Order;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
-use Plugins\Sirsoft\PayNhnkcp\Concerns\PreventsReplayCallback;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\IssuesReceiptCookie;
+use Plugins\Sirsoft\PayNhnkcp\Concerns\PreventsReplayCallback;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\RecordsPaymentWindowClosure;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\ResolvesEasyPayDisplay;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\SanitizesPgResponse;
-use Plugins\Sirsoft\PayNhnkcp\Concerns\SerializesPaymentCallbacks;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\SendsKcpNotifyResponse;
+use Plugins\Sirsoft\PayNhnkcp\Concerns\SerializesPaymentCallbacks;
 use Plugins\Sirsoft\PayNhnkcp\Http\Requests\AuthCallbackRequest;
 use Plugins\Sirsoft\PayNhnkcp\Http\Requests\VbankNotifyRequest;
 use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
@@ -37,13 +37,13 @@ use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
  */
 class PaymentCallbackController
 {
-    use PreventsReplayCallback;
     use IssuesReceiptCookie;
+    use PreventsReplayCallback;
     use RecordsPaymentWindowClosure;
     use ResolvesEasyPayDisplay;
     use SanitizesPgResponse;
-    use SerializesPaymentCallbacks;
     use SendsKcpNotifyResponse;
+    use SerializesPaymentCallbacks;
 
     private const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
 
@@ -265,7 +265,7 @@ class PaymentCallbackController
             // 가상계좌: 계좌 발급 완료 처리 (실제 입금은 vbankNotify에서 처리)
             // KCP 콜백의 use_pay_method=VCNT 또는 주문의 payment_method=vbank 로 감지
             $isVbank = ($validated['use_pay_method'] ?? '') === 'VCNT'
-                || in_array($order->payment?->payment_method?->value, ['vbank', 'virtual_account'], true);
+                || (bool) $order->payment?->isVirtualAccount();
             if ($isVbank) {
                 return $this->handleVbankIssued($validated, $order, $encData, $encInfo, $ordrIdxx, $custIp, $request);
             }
@@ -767,7 +767,7 @@ class PaymentCallbackController
             return 'payment_not_found';
         }
 
-        if (! in_array($payment->payment_method?->value, ['vbank', 'virtual_account'], true)) {
+        if (! $payment->isVirtualAccount()) {
             return 'payment_method_not_vbank';
         }
 
