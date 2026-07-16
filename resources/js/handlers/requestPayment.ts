@@ -17,10 +17,15 @@ interface PgPaymentData {
     amount: number;
     currency?: string;
     pay_method?: string;
+    /**
+     * 서버가 저장한 결제수단 ID — 확장 수단이면 확장 ID 그대로(예: 'nhnkcp_naverpay').
+     * 확장 결제수단이 1급 시민이 되면서 서버가 원본 수단을 알고 내려준다(#475).
+     */
+    payment_method?: string;
     customer_name?: string;
     customer_email?: string;
     customer_phone?: string;
-    /** 복합과세 분할용 — orderResponseInterceptor가 data.order 에서 주입 */
+    /** 복합과세 분할용 */
     tax_amount?: number;
     vat_amount?: number;
     tax_free_amount?: number;
@@ -119,6 +124,18 @@ const KCP_EASY_PAY_DIRECT: Record<string, Record<string, string>> = {
     nhnkcp_kakaopay:       { kakaopay_direct: 'Y' },
     nhnkcp_applepay:       { applepay_direct: 'Y' },
 };
+
+export function buildKcpEasyPayReturnFields(paymentMethod: string, isEasyPay: boolean): Record<string, string> {
+    const methodKey = paymentMethod.toLowerCase();
+    if (!isEasyPay || !Object.prototype.hasOwnProperty.call(KCP_EASY_PAY_DIRECT, methodKey)) {
+        return {};
+    }
+
+    return {
+        param_opt_1: methodKey,
+        nhnkcp_easy_pay_method: methodKey,
+    };
+}
 
 function isKcpPaymentFrameClosed(iframe: HTMLIFrameElement): boolean {
     if (!iframe.isConnected) {
@@ -223,7 +240,12 @@ export async function requestPaymentHandler(action: any, _context?: any): Promis
         return;
     }
 
-    const paymentMethod = paramPaymentMethod ?? pgPaymentData.pay_method ?? 'card';
+    // 서버가 저장한 결제수단(payment_method)이 SSoT — 확장 수단이면 확장 ID 가 그대로 온다.
+    // params.paymentMethod 는 인터셉터 시절의 잔재이나 직접 호출 경로 호환을 위해 우선 존중한다.
+    const paymentMethod = paramPaymentMethod
+        ?? pgPaymentData.payment_method
+        ?? pgPaymentData.pay_method
+        ?? 'card';
     const isEasyPay = typeof paymentMethod === 'string' && paymentMethod.startsWith('nhnkcp_');
 
     const G7Core = (window as any).G7Core;
@@ -408,6 +430,7 @@ async function handlePcPayment(
     };
 
     Object.assign(fields, buildKcpTaxFields(pgPaymentData));
+    Object.assign(fields, buildKcpEasyPayReturnFields(paymentMethod, isEasyPay));
 
     // 가상계좌 전용 파라미터
     if (payMethod === '001000000000') {

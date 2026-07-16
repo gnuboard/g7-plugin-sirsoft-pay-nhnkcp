@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
+    buildKcpEasyPayReturnFields,
     buildKcpTaxFields,
     isSupportedKcpCurrency,
     requestPaymentHandler,
@@ -211,5 +212,14 @@ describe('requestPaymentHandler', () => {
         expect(isSupportedKcpCurrency(undefined)).toBe(true);
         expect(isSupportedKcpCurrency('KRW')).toBe(true);
         expect(isSupportedKcpCurrency('usd')).toBe(false);
+    });
+
+    it('간편결제 원 결제수단을 KCP callback 반환 필드에 싣는다', () => {
+        expect(buildKcpEasyPayReturnFields('nhnkcp_naverpay', true)).toEqual({
+            param_opt_1: 'nhnkcp_naverpay',
+            nhnkcp_easy_pay_method: 'nhnkcp_naverpay',
+        });
+        expect(buildKcpEasyPayReturnFields('card', false)).toEqual({});
+        expect(buildKcpEasyPayReturnFields('nhnkcp_unknown', true)).toEqual({});
     });
 });

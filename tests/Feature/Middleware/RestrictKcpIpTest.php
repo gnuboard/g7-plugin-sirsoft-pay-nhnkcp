@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Plugins\Sirsoft\PayNhnkcp\Tests\Feature\Middleware;
 
 use App\Services\PluginSettingsService;
+use Illuminate\Testing\TestResponse;
 use Plugins\Sirsoft\PayNhnkcp\Tests\PluginTestCase;
 
 /**
@@ -30,7 +31,7 @@ class RestrictKcpIpTest extends PluginTestCase
         $mock->method('get')->willReturn([
             'is_test_mode' => $isTestMode,
             'redirect_success_url' => '/shop/orders/{orderId}/complete',
-            'redirect_fail_url'    => '/shop/checkout',
+            'redirect_fail_url' => '/shop/checkout',
         ]);
         $this->app->instance(PluginSettingsService::class, $mock);
     }
@@ -40,23 +41,26 @@ class RestrictKcpIpTest extends PluginTestCase
         $mock = $this->createMock(PluginSettingsService::class);
         $mock->method('get')->willReturn([
             'redirect_success_url' => '/shop/orders/{orderId}/complete',
-            'redirect_fail_url'    => '/shop/checkout',
+            'redirect_fail_url' => '/shop/checkout',
         ]);
         $this->app->instance(PluginSettingsService::class, $mock);
     }
 
-    private function postVbankNotify(string $remoteIp): \Illuminate\Testing\TestResponse
+    private function postVbankNotify(string $remoteIp): TestResponse
     {
         return $this->withServerVariables(['REMOTE_ADDR' => $remoteIp])
             ->post('/plugins/sirsoft-pay_nhnkcp/payment/vbank-notify', [
-                'tno'       => 'KCP_TNO_TEST',
-                'order_no'  => 'ORD-IP-TEST',
-                'tx_cd'     => 'TX00',
-                'op_cd'     => '50',
+                'tno' => 'KCP_TNO_TEST',
+                'order_no' => 'ORD-IP-TEST',
+                'tx_cd' => 'TX00',
+                'op_cd' => '50',
                 'ipgm_mnyx' => 30000,
             ]);
     }
 
+    /**
+     * @effects pay_ip_guard_matched_for_webhook_routes
+     */
     public function test_blocks_unauthorized_ip_in_live_mode(): void
     {
         $this->mockSettings(isTestMode: false);
@@ -64,6 +68,28 @@ class RestrictKcpIpTest extends PluginTestCase
         $response = $this->postVbankNotify(self::UNAUTHORIZED_IP);
 
         $response->assertForbidden();
+    }
+
+    /**
+     * self-gate 타게팅 정밀도 회귀: IP 가드는 브라우저 POST 콜백(payment.callback)에는
+     * 부착되지 않아야 한다. 콜백은 사용자 IP 라 화이트리스트로 차단하면 결제 실패.
+     * 미인가 IP 로 콜백을 호출해도 IP 가드에 의한 403 이 발생하지 않음을 단언한다
+     * (컨트롤러는 검증 실패로 302 redirect 하지만 핵심은 403(IP 차단)이 아니라는 것).
+     *
+     * @effects pay_ip_guard_not_matched_for_browser_callback
+     */
+    public function test_ip_guard_not_applied_to_browser_callback_route(): void
+    {
+        $this->mockSettings(isTestMode: false);
+
+        $response = $this->withServerVariables(['REMOTE_ADDR' => self::UNAUTHORIZED_IP])
+            ->post('/plugins/sirsoft-pay_nhnkcp/payment/callback', [
+                'res_cd' => 'XXXX',
+                'ordr_idxx' => 'ORD-CALLBACK-TEST',
+            ]);
+
+        // IP 가드가 붙었다면 403 이었을 것 — 붙지 않았으므로 403 이 아니어야 한다.
+        $this->assertNotSame(403, $response->getStatusCode(), 'IP 가드가 브라우저 콜백에 잘못 부착되어 결제 콜백을 차단했습니다 (정밀도 회귀).');
     }
 
     public function test_missing_test_mode_setting_fails_closed_for_unauthorized_ip(): void

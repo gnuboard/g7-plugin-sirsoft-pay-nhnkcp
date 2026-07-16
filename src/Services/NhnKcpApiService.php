@@ -197,7 +197,7 @@ class NhnKcpApiService
      * @param int    $cancelAmt 취소 금액
      * @param string $cancelMsg 취소 사유
      * @param bool   $isPartial 부분 취소 여부
-     * @param int    $totalAmt  원거래 결제 금액 (부분취소 시 rem_mny 계산에 사용)
+     * @param int    $totalAmt  현재 부분취소 가능 금액 (KCP rem_mny)
      * @return array 파싱된 KCP 응답
      */
     public function cancelPayment(
@@ -217,8 +217,9 @@ class NhnKcpApiService
         ];
 
         if ($isPartial && $totalAmt > 0) {
-            $remMny = $totalAmt - $cancelAmt;
-            $fields['rem_mny'] = (string) $remMny;
+            // KCP rem_mny는 취소 후 잔액이 아니라 현재 부분취소 가능한 금액이다.
+            // 첫 부분취소는 원거래금액, 이후에는 이전 부분취소 후 남은 잔액을 전달한다.
+            $fields['rem_mny'] = (string) $totalAmt;
             $fields['mod_mny'] = (string) $cancelAmt;
         }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Plugins\Sirsoft\PayNhnkcp\Concerns;
 
+use InvalidArgumentException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -24,6 +25,33 @@ trait RecordsPaymentWindowClosure
         // 결제 청구액 SSoT = 결제 통화(order_currency) 환산액. base(total_due_amount) 직접 비교 시
         // base≠결제 통화에서 PG 청구 통화와 단위가 어긋난다(buildPgPaymentData 와 동일 기준).
         return app(CurrencyConversionService::class)->resolveOrderPaymentChargeAmount($order);
+    }
+
+    protected function resolveExpectedPaymentPriceOrNull(Order $order, string $context, array $logContext = []): ?int
+    {
+        try {
+            return $this->expectedPaymentPrice($order);
+        } catch (InvalidArgumentException $e) {
+            $this->logInvalidPaymentCurrency($order, $e, $context, $logContext);
+
+            return null;
+        }
+    }
+
+    protected function logInvalidPaymentCurrency(
+        Order $order,
+        InvalidArgumentException $e,
+        string $context,
+        array $logContext = [],
+    ): void {
+        Log::error('NHN KCP: payment currency is not chargeable', array_merge([
+            'context' => $context,
+            'order_id' => $order->id,
+            'order_number' => $order->order_number,
+            'currency' => $order->currency,
+            'currency_snapshot' => $order->currency_snapshot,
+            'error' => $e->getMessage(),
+        ], $logContext));
     }
 
     protected function requestMatchesOrderBuyer(Request $request, Order $order): bool
@@ -129,8 +157,13 @@ trait RecordsPaymentWindowClosure
             return false;
         }
 
-        if ($amount !== null && $amount !== $this->expectedPaymentPrice($order)) {
-            return false;
+        if ($amount !== null) {
+            $expectedAmount = $this->resolveExpectedPaymentPriceOrNull($order, 'retry_restore', [
+                'received_amount' => $amount,
+            ]);
+            if ($expectedAmount === null || $amount !== $expectedAmount) {
+                return false;
+            }
         }
 
         if (! $this->isRetryableKcpFailure($order, $payment)) {

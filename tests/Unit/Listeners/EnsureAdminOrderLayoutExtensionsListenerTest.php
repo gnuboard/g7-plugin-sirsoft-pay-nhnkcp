@@ -18,9 +18,12 @@ class EnsureAdminOrderLayoutExtensionsListenerTest extends TestCase
         $json = json_encode($result, JSON_UNESCAPED_SLASHES);
 
         $this->assertSame(1, $this->countDataSources($result, 'nhnkcp_test_map'));
+        $this->assertSame(1, $this->countDataSources($result, 'nhnkcp_easy_pay_display_map'));
         $this->assertSame(1, $this->countString($result, 'nhnkcp_test_map.data?.[row.order_number] === true'));
+        $this->assertSame(1, $this->countString($result, 'nhnkcp_easy_pay_display_map.data?.[row.order_number]?.payment_method_display_label ?? row.payment?.payment_method_label'));
         $this->assertIsString($json);
         $this->assertStringContainsString('/api/plugins/sirsoft-pay_nhnkcp/admin/orders/test-mode-map', $json);
+        $this->assertStringContainsString('/api/plugins/sirsoft-pay_nhnkcp/admin/orders/easy-pay-display-map', $json);
         $this->assertStringContainsString('sirsoft-pay_nhnkcp.admin.test_mode_badge', $json);
     }
 
@@ -32,7 +35,9 @@ class EnsureAdminOrderLayoutExtensionsListenerTest extends TestCase
         $twice = $listener->ensureTestBadgeLayout($once, 1);
 
         $this->assertSame(1, $this->countDataSources($twice, 'nhnkcp_test_map'));
+        $this->assertSame(1, $this->countDataSources($twice, 'nhnkcp_easy_pay_display_map'));
         $this->assertSame(1, $this->countString($twice, 'nhnkcp_test_map.data?.[row.order_number] === true'));
+        $this->assertSame(1, $this->countString($twice, 'nhnkcp_easy_pay_display_map.data?.[row.order_number]?.payment_method_display_label ?? row.payment?.payment_method_label'));
     }
 
     public function test_detail_listener_ensures_test_notice_and_payment_panels(): void
@@ -57,6 +62,12 @@ class EnsureAdminOrderLayoutExtensionsListenerTest extends TestCase
         $this->assertIsString($json);
         $this->assertStringContainsString('kcp_status.data?._is_test_mode === true', $json);
         $this->assertStringContainsString('sirsoft-pay_nhnkcp.admin.order_info_title', $json);
+        $this->assertStringContainsString("kcp_status.data?.payment_status === 'cancelled'", $json);
+        $this->assertStringContainsString("kcp_status.data?.refund_status === 'completed'", $json);
+        $this->assertStringContainsString('sirsoft-pay_nhnkcp.admin.pay_status_cancel_completed', $json);
+        $this->assertStringContainsString('sirsoft-pay_nhnkcp.admin.result_payment_status', $json);
+        $this->assertStringContainsString('sirsoft-pay_nhnkcp.admin.result_cancelled_amount', $json);
+        $this->assertStringContainsString('sirsoft-pay_nhnkcp.admin.result_refund_status', $json);
     }
 
     public function test_detail_listener_uses_wrapper_when_tab_content_area_is_renamed(): void

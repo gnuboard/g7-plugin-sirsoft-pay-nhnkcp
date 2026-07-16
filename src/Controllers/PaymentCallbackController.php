@@ -7,6 +7,7 @@ namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
 use App\Extension\HookManager;
 use App\Services\PluginSettingsService;
 use Carbon\Carbon;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -15,12 +16,14 @@ use Modules\Sirsoft\Ecommerce\Enums\OrderStatusEnum;
 use Modules\Sirsoft\Ecommerce\Exceptions\PaymentAmountMismatchException;
 use Modules\Sirsoft\Ecommerce\Helpers\DeviceDetector;
 use Modules\Sirsoft\Ecommerce\Models\Order;
-use Modules\Sirsoft\Ecommerce\Services\CurrencyConversionService;
 use Modules\Sirsoft\Ecommerce\Services\OrderProcessingService;
+use Plugins\Sirsoft\PayNhnkcp\Concerns\IssuesReceiptCookie;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\PreventsReplayCallback;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\RecordsPaymentWindowClosure;
+use Plugins\Sirsoft\PayNhnkcp\Concerns\ResolvesEasyPayDisplay;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\SanitizesPgResponse;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\SendsKcpNotifyResponse;
+use Plugins\Sirsoft\PayNhnkcp\Concerns\SerializesPaymentCallbacks;
 use Plugins\Sirsoft\PayNhnkcp\Http\Requests\AuthCallbackRequest;
 use Plugins\Sirsoft\PayNhnkcp\Http\Requests\VbankNotifyRequest;
 use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
@@ -34,10 +37,13 @@ use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
  */
 class PaymentCallbackController
 {
+    use IssuesReceiptCookie;
     use PreventsReplayCallback;
     use RecordsPaymentWindowClosure;
+    use ResolvesEasyPayDisplay;
     use SanitizesPgResponse;
     use SendsKcpNotifyResponse;
+    use SerializesPaymentCallbacks;
 
     private const PLUGIN_IDENTIFIER = 'sirsoft-pay_nhnkcp';
 
@@ -178,6 +184,7 @@ class PaymentCallbackController
         $order = null;
         $approvedTno = null;
         $approvedAmtForCancel = 0;
+        $callbackLock = null;
 
         try {
             // 2단계: 주문 조회
@@ -188,6 +195,9 @@ class PaymentCallbackController
 
                 return redirect($this->resolveFailUrl(['error' => 'order_not_found', 'orderId' => $ordrIdxx]));
             }
+
+            $callbackLock = $this->acquireOrderCallbackLock('authCallback', $ordrIdxx);
+            $order = $order->fresh('payment') ?? $order;
 
             if ($order->order_status === OrderStatusEnum::CANCELLED) {
                 $restored = $this->restoreRetryableKcpOrder($order, $goodMny > 0 ? $goodMny : null);
@@ -203,7 +213,28 @@ class PaymentCallbackController
                 $order = $order->fresh('payment') ?? $order;
             }
 
-            $expectedAmount = $this->expectedPaymentPrice($order);
+            if (($order->payment?->isPaid() ?? false) || $order->order_status === OrderStatusEnum::PAYMENT_COMPLETE) {
+                Log::info('KCP: authCallback already paid order, skipping CLI approval', [
+                    'ordr_idxx' => $ordrIdxx,
+                    'transaction_id' => $order->payment?->transaction_id,
+                ]);
+
+                $this->queueReceiptCookie($ordrIdxx);
+
+                return redirect($this->resolveSuccessUrl($ordrIdxx));
+            }
+
+            $expectedAmount = $this->resolveExpectedPaymentPriceOrNull($order, 'auth_callback', [
+                'ordr_idxx' => $ordrIdxx,
+                'good_mny' => $goodMny,
+            ]);
+            if ($expectedAmount === null) {
+                return redirect($this->resolveFailUrl([
+                    'error' => 'invalid_payment_currency',
+                    'orderId' => $ordrIdxx,
+                ]));
+            }
+
             if (! $this->isKrwOrder($order)) {
                 Log::warning('KCP: unsupported order currency', [
                     'ordr_idxx' => $ordrIdxx,
@@ -234,7 +265,7 @@ class PaymentCallbackController
             // 가상계좌: 계좌 발급 완료 처리 (실제 입금은 vbankNotify에서 처리)
             // KCP 콜백의 use_pay_method=VCNT 또는 주문의 payment_method=vbank 로 감지
             $isVbank = ($validated['use_pay_method'] ?? '') === 'VCNT'
-                || in_array($order->payment?->payment_method?->value, ['vbank', 'virtual_account'], true);
+                || (bool) $order->payment?->isVirtualAccount();
             if ($isVbank) {
                 return $this->handleVbankIssued($validated, $order, $encData, $encInfo, $ordrIdxx, $custIp, $request);
             }
@@ -275,6 +306,7 @@ class PaymentCallbackController
             // Replay 가드: 동일 tno 가 이미 paid 상태면 중복 처리하지 않고 성공 페이지로 복귀
             if ($this->wasAlreadyPaid($tno)) {
                 $this->logReplayDetected($tno, $ordrIdxx, 'authCallback (card)');
+                $this->queueReceiptCookie($ordrIdxx);
 
                 return redirect($this->resolveSuccessUrl($ordrIdxx));
             }
@@ -285,13 +317,14 @@ class PaymentCallbackController
             // base≠결제 통화(예: base JPY, 결제 KRW)에서도 PG 청구 통화와 단위가 일치한다.
             $approvedAmt = $goodMny > 0
                 ? $goodMny
-                : app(CurrencyConversionService::class)->resolveOrderPaymentChargeAmount($order);
+                : $expectedAmount;
 
             // PG 측 승인이 확정된 시점 — 후속 처리 실패 시 cancel 필요. catch 에서 참조.
             $approvedTno = $tno;
             $approvedAmtForCancel = $approvedAmt;
 
             $isEscrow = ($pgResponse['escw_yn'] ?? '') === 'Y';
+            $easyPayMeta = $this->resolveEasyPayMeta($validated);
 
             // 4단계: 주문 완료 처리
             $this->orderService->completePayment($order, [
@@ -301,11 +334,16 @@ class PaymentCallbackController
                 'card_name' => $pgResponse['card_name'] ?? $pgResponse['bank_name'] ?? null,
                 'card_installment_months' => (int) ($pgResponse['quota'] ?? 0),
                 'is_interest_free' => false,
-                'embedded_pg_provider' => null,
+                'embedded_pg_provider' => $easyPayMeta['provider'] ?? null,
                 'receipt_url' => null,
                 'payment_meta' => [
                     'res_cd' => $pgResCd,
                     ...$this->currentCredentialMeta(),
+                    ...($easyPayMeta === [] ? [] : [
+                        'nhnkcp_easy_pay_method' => $easyPayMeta['method'],
+                        'nhnkcp_easy_pay_provider' => $easyPayMeta['provider'],
+                        'nhnkcp_easy_pay_label' => $easyPayMeta['label'],
+                    ]),
                     'use_pay_method' => $validated['use_pay_method'] ?? $pgResponse['use_pay_method'] ?? null,
                     'app_time' => $pgResponse['app_time'] ?? null,
                     'bank_name' => $pgResponse['bank_name'] ?? null,
@@ -326,7 +364,27 @@ class PaymentCallbackController
             // (기본 PG가 타 PG일 때 주문이 해당 PG provider로 생성되는 경우 대비)
             $order->payment()->update(['pg_provider' => 'nhnkcp']);
 
+            $this->queueReceiptCookie($ordrIdxx);
+
             return redirect($this->resolveSuccessUrl($ordrIdxx));
+
+        } catch (LockTimeoutException $e) {
+            Log::warning('KCP: authCallback skipped because callback lock is busy', [
+                'ordr_idxx' => $ordrIdxx,
+            ]);
+
+            $latestOrder = $this->orderService->findByOrderNumber($ordrIdxx);
+            if (($latestOrder?->payment?->isPaid() ?? false)
+                || $latestOrder?->order_status === OrderStatusEnum::PAYMENT_COMPLETE) {
+                $this->queueReceiptCookie($ordrIdxx);
+
+                return redirect($this->resolveSuccessUrl($ordrIdxx));
+            }
+
+            return redirect($this->resolveFailUrl([
+                'error' => 'callback_locked',
+                'orderId' => $ordrIdxx,
+            ]));
 
         } catch (PaymentAmountMismatchException $e) {
             Log::error('KCP: amount mismatch', [
@@ -373,6 +431,8 @@ class PaymentCallbackController
                 'message' => $e->getMessage(),
                 'orderId' => $ordrIdxx,
             ]));
+        } finally {
+            $this->releaseOrderCallbackLock($callbackLock);
         }
     }
 
@@ -401,6 +461,7 @@ class PaymentCallbackController
         $opCd = (string) ($validated['op_cd'] ?? '');
         $ipgmMny = (int) ($validated['ipgm_mnyx'] ?? 0);
         $notiId = $validated['noti_id'] ?? null;
+        $callbackLock = null;
 
         // tx_cd 가 TX00 가 아니면 본 endpoint 가 처리하지 않음.
         // (KCP 가 단일 webhook URL 에 모든 tx_cd 를 보낼 수도 있어 안전하게 무시 + result=0000)
@@ -436,6 +497,9 @@ class PaymentCallbackController
                 // 영구 실패 — 재시도 의미 없음. result=0000 으로 KCP 재통보 차단.
                 return $this->kcpNotifyResponse();
             }
+
+            $callbackLock = $this->acquireOrderCallbackLock('vbankNotify', $orderNo);
+            $order = $order->fresh('payment') ?? $order;
 
             $contextError = $this->validateVbankNotifyContext($order, $validated, $tno, $ipgmMny);
             if ($contextError !== null) {
@@ -481,6 +545,15 @@ class PaymentCallbackController
 
             return $this->kcpNotifyResponse();
 
+        } catch (LockTimeoutException $e) {
+            Log::warning('KCP: vbank notify lock timeout — retry requested', [
+                'tno' => $tno,
+                'order_no' => $orderNo,
+                'noti_id' => $notiId,
+            ]);
+
+            return $this->kcpNotifyRetry();
+
         } catch (\Exception $e) {
             Log::error('KCP: vbank notify failed', [
                 'tno' => $tno, 'order_no' => $orderNo, 'noti_id' => $notiId,
@@ -489,6 +562,8 @@ class PaymentCallbackController
 
             // 일시적 실패 (DB 등) — result != 0000 으로 KCP 재통보 유도
             return $this->kcpNotifyRetry();
+        } finally {
+            $this->releaseOrderCallbackLock($callbackLock);
         }
     }
 
@@ -674,6 +749,8 @@ class PaymentCallbackController
             ]));
         }
 
+        $this->queueReceiptCookie($ordrIdxx);
+
         return redirect($this->resolveSuccessUrl($ordrIdxx));
     }
 
@@ -690,7 +767,7 @@ class PaymentCallbackController
             return 'payment_not_found';
         }
 
-        if (! in_array($payment->payment_method?->value, ['vbank', 'virtual_account'], true)) {
+        if (! $payment->isVirtualAccount()) {
             return 'payment_method_not_vbank';
         }
 
@@ -714,6 +791,10 @@ class PaymentCallbackController
         }
 
         $expectedAmount = $this->expectedVbankNotifyAmount($order);
+        if ($expectedAmount === null) {
+            return 'invalid_payment_currency';
+        }
+
         if ($amount !== $expectedAmount) {
             return 'amount_mismatch';
         }
@@ -721,7 +802,7 @@ class PaymentCallbackController
         return null;
     }
 
-    private function expectedVbankNotifyAmount(Order $order): int
+    private function expectedVbankNotifyAmount(Order $order): ?int
     {
         $payment = $order->payment;
         $paidAmount = (int) round((float) ($payment?->paid_amount_local ?? 0));
@@ -730,7 +811,9 @@ class PaymentCallbackController
             return $paidAmount;
         }
 
-        return $this->expectedPaymentPrice($order);
+        return $this->resolveExpectedPaymentPriceOrNull($order, 'vbank_notify', [
+            'transaction_id' => $payment?->transaction_id,
+        ]);
     }
 
     /**

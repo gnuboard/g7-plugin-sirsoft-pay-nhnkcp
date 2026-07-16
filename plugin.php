@@ -120,11 +120,11 @@ class Plugin extends AbstractPlugin
                 ],
             ],
             'easy_pay_allow_with_other_pg' => ['type' => 'boolean', 'default' => false],
-            'easy_pay_payco'               => ['type' => 'boolean', 'default' => false],
-            'easy_pay_naverpay'            => ['type' => 'boolean', 'default' => false],
-            'easy_pay_naverpay_point'      => ['type' => 'boolean', 'default' => false],
-            'easy_pay_kakaopay'            => ['type' => 'boolean', 'default' => false],
-            'easy_pay_applepay'            => ['type' => 'boolean', 'default' => false],
+            'easy_pay_payco' => ['type' => 'boolean', 'default' => false],
+            'easy_pay_naverpay' => ['type' => 'boolean', 'default' => false],
+            'easy_pay_naverpay_point' => ['type' => 'boolean', 'default' => false],
+            'easy_pay_kakaopay' => ['type' => 'boolean', 'default' => false],
+            'easy_pay_applepay' => ['type' => 'boolean', 'default' => false],
         ];
     }
 
@@ -142,11 +142,34 @@ class Plugin extends AbstractPlugin
             'escrow_test_site_cd' => '',
             'vbank_expire_days' => 3,
             'easy_pay_allow_with_other_pg' => false,
-            'easy_pay_payco'               => false,
-            'easy_pay_naverpay'            => false,
-            'easy_pay_naverpay_point'      => false,
-            'easy_pay_kakaopay'            => false,
-            'easy_pay_applepay'            => false,
+            'easy_pay_payco' => false,
+            'easy_pay_naverpay' => false,
+            'easy_pay_naverpay_point' => false,
+            'easy_pay_kakaopay' => false,
+            'easy_pay_applepay' => false,
+        ];
+    }
+
+    /**
+     * 이 플러그인이 등록할 HTTP 미들웨어 선언을 반환합니다.
+     *
+     * IP 화이트리스트(RestrictKcpIp)는 KCP 서버 발신 webhook 라우트에만 부착합니다.
+     * 브라우저 POST 콜백(payment.callback)은 사용자 IP 라 대상에서 제외 — 결제 회귀 방지.
+     * 코어 ExtensionMiddlewareGate 가 요청 시점에 실행합니다.
+     *
+     * @return array<int, array{class: class-string, groups: array<int, string>, timing?: string, targets: array<int, string>}>
+     */
+    public function getMiddleware(): array
+    {
+        return [
+            [
+                'class' => Http\Middleware\RestrictKcpIp::class,
+                'groups' => ['web'],
+                'targets' => [
+                    'web.plugins.sirsoft-pay_nhnkcp.payment.vbank-notify',
+                    'web.plugins.sirsoft-pay_nhnkcp.payment.escrow-common-notify',
+                ],
+            ],
         ];
     }
 

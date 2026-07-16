@@ -42,7 +42,13 @@ function getToken(): string | null {
     return localStorage.getItem('auth_token');
 }
 
-async function fetchReceiptUrls(orderNumber: string): Promise<{ receipt_url?: string; cash_receipt_url?: string } | null> {
+interface ReceiptInfo {
+    receipt_url?: string;
+    cash_receipt_url?: string | null;
+    payment_method_display_label?: string | null;
+}
+
+async function fetchReceiptUrls(orderNumber: string): Promise<ReceiptInfo | null> {
     const token = getToken();
     if (!token) return null;
     try {
@@ -50,7 +56,7 @@ async function fetchReceiptUrls(orderNumber: string): Promise<{ receipt_url?: st
             headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
         });
         if (!res.ok) return null;
-        return (await res.json()) as { receipt_url?: string; cash_receipt_url?: string };
+        return (await res.json()) as ReceiptInfo;
     } catch {
         return null;
     }
@@ -195,6 +201,34 @@ function makeInfoRow(label: string, value: string, valueClass = 'font-medium tex
     return row;
 }
 
+export function patchMypagePaymentMethodDisplay(container: Element, displayLabel: string | null | undefined): boolean {
+    if (!displayLabel) return false;
+
+    const rows = Array.from(container.querySelectorAll<HTMLElement>('div'));
+    for (const row of rows) {
+        const spans = Array.from(row.children).filter(
+            (child): child is HTMLElement => child instanceof HTMLElement && child.tagName === 'SPAN',
+        );
+        if (spans.length < 2) continue;
+
+        const label = spans[0].textContent?.trim();
+        if (label !== '결제 방법' && label !== '결제수단' && label !== 'Payment Method') continue;
+
+        const value = spans[spans.length - 1];
+        if (value.textContent?.trim() === displayLabel) {
+            row.dataset.nhnkcpPaymentMethodRow = 'true';
+            return true;
+        }
+
+        value.textContent = displayLabel;
+        value.dataset.nhnkcpPaymentMethodPatched = 'true';
+        row.dataset.nhnkcpPaymentMethodRow = 'true';
+        return true;
+    }
+
+    return false;
+}
+
 function buildVbankInfoBlock(payment: Payment, totalAmountFormatted: string): HTMLElement {
     const wrap = document.createElement('div');
     wrap.id = VBANK_ID;
@@ -299,6 +333,12 @@ async function tryInject(orderNumber: string): Promise<boolean> {
     const container = findPaymentRowsContainer();
     if (!container) return false; // DOM 미렌더링 → 재시도
 
+    const receiptInfo = needsReceipt ? await fetchReceiptUrls(orderNumber) : null;
+    const displayPatched = patchMypagePaymentMethodDisplay(
+        container,
+        receiptInfo?.payment_method_display_label,
+    );
+
     if (!document.getElementById(VBANK_ID) && needsVbank) {
         container.appendChild(buildVbankInfoBlock(payment, orderData.total_amount_formatted ?? ''));
         console.info(`[${PLUGIN_ID}] vbank info injected on mypage order show`);
@@ -309,6 +349,10 @@ async function tryInject(orderNumber: string): Promise<boolean> {
         container.appendChild(buildReceiptRow(orderNumber));
         console.info(`[${PLUGIN_ID}] receipt button injected on mypage order show`);
         return false;
+    }
+
+    if (displayPatched) {
+        console.info(`[${PLUGIN_ID}] payment method display patched on mypage order show`);
     }
 
     if (!document.getElementById(MOCK_DEPOSIT_ID) && mightNeedMock) {

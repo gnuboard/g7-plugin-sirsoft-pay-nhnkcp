@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\AdminEscrowDeliveryController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\AdminOrderListController;
+use Plugins\Sirsoft\PayNhnkcp\Controllers\AdminSettingsStatusController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\AdminTransactionController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\HealthCheckController;
 use Plugins\Sirsoft\PayNhnkcp\Controllers\MobileApprovalController;
@@ -29,10 +30,11 @@ Route::post('/payment/close-report', [PaymentCloseReportController::class, 'stor
 Route::post('/payment/retry', [PaymentRetryController::class, 'store'])
     ->name('payment.retry');
 
-Route::middleware(['auth:sanctum'])->group(function () {
-    Route::get('/user/orders/{orderNumber}/receipt', [UserReceiptController::class, 'show'])
-        ->name('user.orders.receipt');
+Route::get('/user/orders/{orderNumber}/receipt', [UserReceiptController::class, 'show'])
+    ->middleware('optional.sanctum')
+    ->name('user.orders.receipt');
 
+Route::middleware(['auth:sanctum'])->group(function () {
     // 테스트 모드 가상계좌 모의입금 정보 (입금대기 상태일 때만 데이터 반환)
     Route::get('/user/orders/{orderNumber}/vbank-mock-deposit-info', [UserVbankMockDepositController::class, 'show'])
         ->name('user.orders.vbank-mock-deposit-info');
@@ -52,9 +54,17 @@ Route::prefix('admin')->name('admin.')->middleware(['auth:sanctum', 'admin'])->g
         ],
     ]))->name('vbank.notify.url');
 
+    Route::get('/settings/test-mode-status', [AdminSettingsStatusController::class, 'testMode'])
+        ->middleware('permission:admin,sirsoft-ecommerce.settings.read')
+        ->name('settings.test-mode-status');
+
     // 테스트 모드 주문 맵 (관리자 주문목록 배지 표시용)
     Route::get('/orders/test-mode-map', [AdminOrderListController::class, 'testModeMap'])
         ->name('orders.test-mode-map');
+
+    // 간편결제 원 결제수단 표시 맵 (관리자 주문목록 보강용)
+    Route::get('/orders/easy-pay-display-map', [AdminOrderListController::class, 'easyPayDisplayMap'])
+        ->name('orders.easy-pay-display-map');
 
     // 주문번호로 거래 정보 조회 (레이아웃 확장 자동 로드용)
     Route::get('/orders/{orderNumber}/transaction-status', [AdminTransactionController::class, 'queryByOrder'])

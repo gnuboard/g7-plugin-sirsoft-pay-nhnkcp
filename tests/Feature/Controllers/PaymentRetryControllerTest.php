@@ -34,6 +34,8 @@ class PaymentRetryControllerTest extends PluginTestCase
             'total_due_amount' => $amount,
             'total_paid_amount' => 0,
             'order_meta' => $orderMeta,
+            'currency' => 'KRW',
+            'currency_snapshot' => self::krwCurrencySnapshot(),
         ]);
 
         OrderPaymentFactory::new()->create([
@@ -52,6 +54,49 @@ class PaymentRetryControllerTest extends PluginTestCase
         return $order;
     }
 
+    private static function krwCurrencySnapshot(): array
+    {
+        return [
+            'base_currency' => 'KRW',
+            'order_currency' => 'KRW',
+            'base_unit' => 1,
+            'exchange_rates' => [
+                'KRW' => [
+                    'rate' => 1,
+                    'rounding_unit' => '1',
+                    'rounding_method' => 'round',
+                    'decimal_places' => 0,
+                    'base_unit' => 1,
+                ],
+            ],
+        ];
+    }
+
+    private static function invalidUsdCurrencySnapshot(): array
+    {
+        return [
+            'base_currency' => 'KRW',
+            'order_currency' => 'USD',
+            'base_unit' => 1000,
+            'exchange_rates' => [
+                'KRW' => [
+                    'rate' => 1,
+                    'rounding_unit' => '1',
+                    'rounding_method' => 'round',
+                    'decimal_places' => 0,
+                    'base_unit' => 1000,
+                ],
+                'USD' => [
+                    'rate' => 0,
+                    'rounding_unit' => '0.01',
+                    'rounding_method' => 'round',
+                    'decimal_places' => 2,
+                    'base_unit' => 1,
+                ],
+            ],
+        ];
+    }
+
     public function test_retry_returns_ready_for_pending_order(): void
     {
         $order = $this->createOrder(10000);
@@ -63,6 +108,27 @@ class PaymentRetryControllerTest extends PluginTestCase
 
         $response->assertOk()
             ->assertJsonPath('data.status', 'ready');
+
+        $order->refresh();
+        $this->assertEquals(OrderStatusEnum::PENDING_ORDER, $order->order_status);
+        $this->assertEquals(PaymentStatusEnum::READY, $order->payment->payment_status);
+    }
+
+    public function test_retry_rejects_invalid_payment_currency_without_server_error(): void
+    {
+        $order = $this->createOrder(10000);
+        $order->update([
+            'currency' => 'USD',
+            'currency_snapshot' => self::invalidUsdCurrencySnapshot(),
+        ]);
+
+        $response = $this->postJson(self::ENDPOINT, [
+            'oid' => $order->order_number,
+            'price' => 10000,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('errors.message.0', 'Payment currency is not chargeable.');
 
         $order->refresh();
         $this->assertEquals(OrderStatusEnum::PENDING_ORDER, $order->order_status);

@@ -119,7 +119,19 @@ class MobileApprovalController
                 ], 403);
             }
 
-            $expectedAmount = $this->expectedPaymentPrice($order);
+            $expectedAmount = $this->resolveExpectedPaymentPriceOrNull($order, 'mobile_approval_key', [
+                'order_number' => $validated['order_number'],
+                'requested_amount' => $validated['amount'],
+                'requested_currency' => $validated['currency'] ?? null,
+                'ip' => $request->ip(),
+            ]);
+            if ($expectedAmount === null) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Payment currency is not chargeable.',
+                ], 422);
+            }
+
             if ((int) $validated['amount'] !== $expectedAmount) {
                 return response()->json([
                     'success' => false,
@@ -190,6 +202,7 @@ class MobileApprovalController
                 if (isset(self::EASY_PAY_DIRECT_FIELDS[$payMethodKey])) {
                     $fields = [...$fields, ...self::EASY_PAY_DIRECT_FIELDS[$payMethodKey]];
                 }
+                $fields = [...$fields, ...$this->buildEasyPayReturnFields($payMethodKey)];
             }
 
             return response()->json([
@@ -240,6 +253,21 @@ class MobileApprovalController
             'comm_tax_mny'  => (string) $supplyAmt,
             'comm_vat_mny'  => (string) $vatAmt,
             'comm_free_mny' => (string) $taxFreeAmt,
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function buildEasyPayReturnFields(string $payMethodKey): array
+    {
+        if (! isset(self::EASY_PAY_DIRECT_FIELDS[$payMethodKey])) {
+            return [];
+        }
+
+        return [
+            'param_opt_1' => $payMethodKey,
+            'nhnkcp_easy_pay_method' => $payMethodKey,
         ];
     }
 

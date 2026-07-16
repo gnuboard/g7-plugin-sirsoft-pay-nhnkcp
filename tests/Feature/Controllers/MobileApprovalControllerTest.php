@@ -41,6 +41,8 @@ class MobileApprovalControllerTest extends PluginTestCase
             'total_tax_amount'     => $taxable,
             'total_vat_amount'     => $vat,
             'total_tax_free_amount'=> $taxFree,
+            'currency'             => 'KRW',
+            'currency_snapshot'    => self::krwCurrencySnapshot(),
         ]);
 
         OrderPaymentFactory::new()->create([
@@ -51,6 +53,49 @@ class MobileApprovalControllerTest extends PluginTestCase
         ]);
 
         return $order;
+    }
+
+    private static function krwCurrencySnapshot(): array
+    {
+        return [
+            'base_currency' => 'KRW',
+            'order_currency' => 'KRW',
+            'base_unit' => 1,
+            'exchange_rates' => [
+                'KRW' => [
+                    'rate' => 1,
+                    'rounding_unit' => '1',
+                    'rounding_method' => 'round',
+                    'decimal_places' => 0,
+                    'base_unit' => 1,
+                ],
+            ],
+        ];
+    }
+
+    private static function invalidUsdCurrencySnapshot(): array
+    {
+        return [
+            'base_currency' => 'KRW',
+            'order_currency' => 'USD',
+            'base_unit' => 1000,
+            'exchange_rates' => [
+                'KRW' => [
+                    'rate' => 1,
+                    'rounding_unit' => '1',
+                    'rounding_method' => 'round',
+                    'decimal_places' => 0,
+                    'base_unit' => 1000,
+                ],
+                'USD' => [
+                    'rate' => 0,
+                    'rounding_unit' => '0.01',
+                    'rounding_method' => 'round',
+                    'decimal_places' => 2,
+                    'base_unit' => 1,
+                ],
+            ],
+        ];
     }
 
     private function mockSoapService(string $approvalKey = 'TEST_APPROVAL_KEY'): void
@@ -217,6 +262,24 @@ class MobileApprovalControllerTest extends PluginTestCase
             ->assertJsonPath('success', false);
     }
 
+    public function test_get_approval_key_rejects_invalid_payment_currency_without_server_error(): void
+    {
+        $order = $this->createOrder(10000);
+        $order->update([
+            'currency' => 'USD',
+            'currency_snapshot' => self::invalidUsdCurrencySnapshot(),
+        ]);
+        $this->expectSoapServiceNotCalled();
+        $this->mockPluginSettings();
+
+        $response = $this->actingAs($order->user)
+            ->postJson(self::APPROVAL_KEY_ENDPOINT, $this->approvalKeyPayload($order, ['currency' => 'USD']));
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('error', 'Payment currency is not chargeable.');
+    }
+
     public function test_get_approval_key_rejects_non_krw_order(): void
     {
         $order = $this->createOrder(10000);
@@ -256,7 +319,9 @@ class MobileApprovalControllerTest extends PluginTestCase
             ->postJson(self::APPROVAL_KEY_ENDPOINT, $this->approvalKeyPayload($order, ['pay_method' => 'nhnkcp_naverpay']));
 
         $response->assertOk()
-            ->assertJsonPath('data.fields.naverpay_direct', 'Y');
+            ->assertJsonPath('data.fields.naverpay_direct', 'Y')
+            ->assertJsonPath('data.fields.param_opt_1', 'nhnkcp_naverpay')
+            ->assertJsonPath('data.fields.nhnkcp_easy_pay_method', 'nhnkcp_naverpay');
     }
 
     public function test_kakaopay_easy_pay_includes_direct_field(): void

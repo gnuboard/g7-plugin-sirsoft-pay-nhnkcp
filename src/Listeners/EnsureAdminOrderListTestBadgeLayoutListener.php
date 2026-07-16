@@ -14,7 +14,11 @@ class EnsureAdminOrderListTestBadgeLayoutListener implements HookListenerInterfa
 
     private const DATA_SOURCE_ID = 'nhnkcp_test_map';
 
+    private const EASY_PAY_DISPLAY_DATA_SOURCE_ID = 'nhnkcp_easy_pay_display_map';
+
     private const BADGE_CONDITION = 'nhnkcp_test_map.data?.[row.order_number] === true';
+
+    private const EASY_PAY_DISPLAY_EXPRESSION = 'nhnkcp_easy_pay_display_map.data?.[row.order_number]?.payment_method_display_label ?? row.payment?.payment_method_label';
 
     /**
      * @return array<string, array<string, mixed>>
@@ -65,24 +69,38 @@ class EnsureAdminOrderListTestBadgeLayoutListener implements HookListenerInterfa
             ? $layout['data_sources']
             : [];
 
+        $existingIds = [];
         foreach ($dataSources as $dataSource) {
-            if (is_array($dataSource) && ($dataSource['id'] ?? null) === self::DATA_SOURCE_ID) {
-                $layout['data_sources'] = $dataSources;
-
-                return $layout;
+            if (is_array($dataSource) && is_string($dataSource['id'] ?? null)) {
+                $existingIds[$dataSource['id']] = true;
             }
         }
 
-        $dataSources[] = [
-            'id' => self::DATA_SOURCE_ID,
-            'label_key' => '$t:sirsoft-pay_nhnkcp.editor.data_source.nhnkcp_test_map',
-            'type' => 'api',
-            'endpoint' => '/api/plugins/sirsoft-pay_nhnkcp/admin/orders/test-mode-map',
-            'method' => 'GET',
-            'auto_fetch' => true,
-            'auth_required' => true,
-            'loading_strategy' => 'progressive',
-        ];
+        if (! isset($existingIds[self::DATA_SOURCE_ID])) {
+            $dataSources[] = [
+                'id' => self::DATA_SOURCE_ID,
+                'label_key' => '$t:sirsoft-pay_nhnkcp.editor.data_source.nhnkcp_test_map',
+                'type' => 'api',
+                'endpoint' => '/api/plugins/sirsoft-pay_nhnkcp/admin/orders/test-mode-map',
+                'method' => 'GET',
+                'auto_fetch' => true,
+                'auth_required' => true,
+                'loading_strategy' => 'progressive',
+            ];
+        }
+
+        if (! isset($existingIds[self::EASY_PAY_DISPLAY_DATA_SOURCE_ID])) {
+            $dataSources[] = [
+                'id' => self::EASY_PAY_DISPLAY_DATA_SOURCE_ID,
+                'label_key' => '$t:sirsoft-pay_nhnkcp.editor.data_source.nhnkcp_easy_pay_display_map',
+                'type' => 'api',
+                'endpoint' => '/api/plugins/sirsoft-pay_nhnkcp/admin/orders/easy-pay-display-map',
+                'method' => 'GET',
+                'auto_fetch' => true,
+                'auth_required' => true,
+                'loading_strategy' => 'progressive',
+            ];
+        }
 
         $layout['data_sources'] = $dataSources;
 
@@ -130,11 +148,33 @@ class EnsureAdminOrderListTestBadgeLayoutListener implements HookListenerInterfa
                 continue;
             }
 
+            $this->ensurePaymentMethodDisplayExpression($column);
             $this->appendBadgeToColumn($column);
 
             return;
         }
         unset($column);
+    }
+
+    /**
+     * @param array<string|int, mixed> $node
+     */
+    private function ensurePaymentMethodDisplayExpression(array &$node): bool
+    {
+        if (($node['text'] ?? null) === '{{row.payment?.payment_method_label}}') {
+            $node['text'] = '{{'.self::EASY_PAY_DISPLAY_EXPRESSION.'}}';
+
+            return true;
+        }
+
+        foreach ($node as &$value) {
+            if (is_array($value) && $this->ensurePaymentMethodDisplayExpression($value)) {
+                return true;
+            }
+        }
+        unset($value);
+
+        return false;
     }
 
     /**
