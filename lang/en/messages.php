@@ -9,6 +9,7 @@ return [
         'in_progress' => 'NHN KCP refund is already in progress.',
     ],
     'errors' => [
+        'payment_failed' => 'Payment could not be completed. Please try again in a moment.',
         'wsdl_missing' => 'KCP WSDL file not found: :file',
         'approval_key_error' => 'KCP approval key error [:code]: :message',
         'soap_error' => 'KCP SOAP integration error: :message',
