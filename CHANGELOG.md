@@ -4,6 +4,12 @@
 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를 따르며,
 [Semantic Versioning](https://semver.org/lang/ko/)을 준수합니다.
 
+## [1.0.2] - 2026-08-14
+
+### Fixed
+
+- 결제 실패 시 이동하는 페이지 주소에 서버 내부 오류 원문이 그대로 실려 나가던 문제를 수정했습니다. 이제 안내 문구만 전달되며, 원인 파악에 필요한 원문은 서버 로그에만 기록됩니다.
+
 ## [1.0.1] - 2026-08-10
 
 ### Changed

@@ -9,6 +9,7 @@ return [
         'in_progress' => 'NHN KCP 환불이 이미 처리 중입니다.',
     ],
     'errors' => [
+        'payment_failed' => '결제 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.',
         'wsdl_missing' => 'KCP WSDL 파일이 없습니다: :file',
         'approval_key_error' => 'KCP 승인키 오류 [:code]: :message',
         'soap_error' => 'KCP SOAP 연동 오류: :message',
