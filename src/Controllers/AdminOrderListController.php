@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
 
+// audit:allow api-doc-coverage 요청 파라미터·응답 구조 무변경 — 테이블명 리터럴을 모델 파생으로 정리한 내부 리팩토링 (#571)
+
 use App\Helpers\ResponseHelper;
 use App\Http\Controllers\Api\Base\AdminBaseController;
 use App\Services\PluginSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Modules\Sirsoft\Ecommerce\Models\Order;
+use Modules\Sirsoft\Ecommerce\Models\OrderPayment;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\ResolvesEasyPayDisplay;
 
 class AdminOrderListController extends AdminBaseController
@@ -36,8 +40,8 @@ class AdminOrderListController extends AdminBaseController
      */
     public function testModeMap(): JsonResponse
     {
-        $query = DB::table('ecommerce_orders as o')
-            ->join('ecommerce_order_payments as p', 'p.order_id', '=', 'o.id')
+        $query = DB::table((new Order)->getTable().' as o')
+            ->join((new OrderPayment)->getTable().' as p', 'p.order_id', '=', 'o.id')
             ->where('p.pg_provider', 'nhnkcp')
             ->where('p.created_at', '>=', now()->subMonths(6));
 
@@ -72,8 +76,8 @@ class AdminOrderListController extends AdminBaseController
      */
     public function easyPayDisplayMap(): JsonResponse
     {
-        $rows = DB::table('ecommerce_orders as o')
-            ->join('ecommerce_order_payments as p', 'p.order_id', '=', 'o.id')
+        $rows = DB::table((new Order)->getTable().' as o')
+            ->join((new OrderPayment)->getTable().' as p', 'p.order_id', '=', 'o.id')
             ->where('p.pg_provider', 'nhnkcp')
             ->where('p.created_at', '>=', now()->subMonths(6))
             ->select([

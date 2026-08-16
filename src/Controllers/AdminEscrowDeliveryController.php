@@ -4,12 +4,17 @@ declare(strict_types=1);
 
 namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
 
+// audit:allow api-doc-coverage 요청 파라미터·응답 구조 무변경 — 테이블명 리터럴을 모델 파생으로 정리한 내부 리팩토링 (#571)
+
 use App\Helpers\ResponseHelper;
 use App\Http\Controllers\Api\Base\AdminBaseController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Modules\Sirsoft\Ecommerce\Models\Order;
+use Modules\Sirsoft\Ecommerce\Models\OrderAddress;
+use Modules\Sirsoft\Ecommerce\Models\OrderPayment;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\SanitizesPgResponse;
 use Plugins\Sirsoft\PayNhnkcp\Services\NhnKcpApiService;
 
@@ -72,8 +77,8 @@ class AdminEscrowDeliveryController extends AdminBaseController
             return ResponseHelper::success('common.success', null);
         }
 
-        $address = DB::table('ecommerce_order_addresses as a')
-            ->join('ecommerce_orders as o', 'o.id', '=', 'a.order_id')
+        $address = DB::table((new OrderAddress)->getTable().' as a')
+            ->join((new Order)->getTable().' as o', 'o.id', '=', 'a.order_id')
             ->where('o.order_number', $orderNumber)
             ->where('a.address_type', 'shipping')
             ->select([
@@ -89,14 +94,14 @@ class AdminEscrowDeliveryController extends AdminBaseController
         $escrowDelivery = $meta['escrow_delivery'] ?? null;
 
         return ResponseHelper::success('common.success', [
-            'has_escrow_payment'  => true,
-            'tno'                 => $payment->transaction_id,
-            'courier_codes'       => self::COURIER_CODES,
-            'prefill'             => [
+            'has_escrow_payment' => true,
+            'tno' => $payment->transaction_id,
+            'courier_codes' => self::COURIER_CODES,
+            'prefill' => [
                 'recv_name' => $address?->recipient_name ?? '',
-                'recv_tel'  => $address?->recipient_phone ?? '',
+                'recv_tel' => $address?->recipient_phone ?? '',
                 'recv_post' => $address?->zipcode ?? '',
-                'recv_addr' => trim(($address?->address ?? '') . ' ' . ($address?->address_detail ?? '')),
+                'recv_addr' => trim(($address?->address ?? '').' '.($address?->address_detail ?? '')),
             ],
             'registered_delivery' => $escrowDelivery,
         ]);
@@ -135,9 +140,9 @@ class AdminEscrowDeliveryController extends AdminBaseController
 
         Log::info('KCP: escrow delivery register requested', [
             'order_number' => $orderNumber,
-            'tno'          => $payment->transaction_id,
-            'deli_numb'    => $deliNumb,
-            'deli_corp'    => $deliCorp,
+            'tno' => $payment->transaction_id,
+            'deli_numb' => $deliNumb,
+            'deli_corp' => $deliCorp,
         ]);
 
         try {
@@ -152,37 +157,37 @@ class AdminEscrowDeliveryController extends AdminBaseController
             $meta = $payment->payment_meta ? json_decode($payment->payment_meta, true) : [];
             $meta['escrow_delivery'] = [
                 'registered_at' => now()->toDateTimeString(),
-                'deli_numb'     => $deliNumb,
-                'deli_corp'     => $deliCorp,
-                'courier_name'  => $courierName,
+                'deli_numb' => $deliNumb,
+                'deli_corp' => $deliCorp,
+                'courier_name' => $courierName,
                 'pg_response_sanitized' => true,
-                'pg_response'   => $this->sanitizePgResponse($pgResponse, self::ESCROW_DELIVERY_RESPONSE_KEYS),
+                'pg_response' => $this->sanitizePgResponse($pgResponse, self::ESCROW_DELIVERY_RESPONSE_KEYS),
             ];
 
-            DB::table('ecommerce_order_payments')
+            DB::table((new OrderPayment)->getTable())
                 ->where('id', $payment->id)
                 ->update([
                     'payment_meta' => json_encode($meta, JSON_UNESCAPED_UNICODE),
-                    'updated_at'   => now(),
+                    'updated_at' => now(),
                 ]);
 
             Log::info('KCP: escrow delivery registered', [
                 'order_number' => $orderNumber,
-                'tno'          => $payment->transaction_id,
-                'deli_numb'    => $deliNumb,
+                'tno' => $payment->transaction_id,
+                'deli_numb' => $deliNumb,
                 'courier_name' => $courierName,
             ]);
 
             return ResponseHelper::success('common.success', [
-                'res_cd'       => $pgResponse['res_cd'] ?? '0000',
-                'deli_numb'    => $deliNumb,
+                'res_cd' => $pgResponse['res_cd'] ?? '0000',
+                'deli_numb' => $deliNumb,
                 'courier_name' => $courierName,
             ]);
 
         } catch (\Exception $e) {
             Log::error('KCP: escrow delivery register exception', [
                 'order_number' => $orderNumber,
-                'error'        => $e->getMessage(),
+                'error' => $e->getMessage(),
             ]);
 
             return ResponseHelper::error('common.failed', 500, [
@@ -193,8 +198,8 @@ class AdminEscrowDeliveryController extends AdminBaseController
 
     private function findEscrowPayment(string $orderNumber): ?object
     {
-        return DB::table('ecommerce_order_payments as p')
-            ->join('ecommerce_orders as o', 'o.id', '=', 'p.order_id')
+        return DB::table((new OrderPayment)->getTable().' as p')
+            ->join((new Order)->getTable().' as o', 'o.id', '=', 'p.order_id')
             ->where('o.order_number', $orderNumber)
             ->where('p.pg_provider', 'nhnkcp')
             ->where('p.is_escrow', true)

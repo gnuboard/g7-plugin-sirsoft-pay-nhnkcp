@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
 
+// audit:allow api-doc-coverage 요청 파라미터·응답 구조 무변경 — 테이블명 리터럴을 모델 파생으로 정리한 내부 리팩토링 (#571)
+
 use App\Helpers\ResponseHelper;
 use App\Http\Controllers\Api\Base\AdminBaseController;
 use App\Services\PluginSettingsService;
@@ -11,6 +13,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Modules\Sirsoft\Ecommerce\Enums\PaymentStatusEnum;
 use Modules\Sirsoft\Ecommerce\Enums\RefundStatusEnum;
+use Modules\Sirsoft\Ecommerce\Models\Order;
+use Modules\Sirsoft\Ecommerce\Models\OrderPayment;
+use Modules\Sirsoft\Ecommerce\Models\OrderRefund;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\ResolvesEasyPayDisplay;
 
 /**
@@ -45,8 +50,8 @@ class AdminTransactionController extends AdminBaseController
      */
     public function queryByOrder(string $orderNumber): JsonResponse
     {
-        $payment = DB::table('ecommerce_order_payments as p')
-            ->join('ecommerce_orders as o', 'o.id', '=', 'p.order_id')
+        $payment = DB::table((new OrderPayment)->getTable().' as p')
+            ->join((new Order)->getTable().' as o', 'o.id', '=', 'p.order_id')
             ->where('o.order_number', $orderNumber)
             ->where('p.pg_provider', 'nhnkcp')
             ->whereNotNull('p.transaction_id')
@@ -89,15 +94,15 @@ class AdminTransactionController extends AdminBaseController
         $refundAmount = $refund ? (float) ($refund->refund_amount ?? 0) : 0.0;
 
         return ResponseHelper::success('common.success', [
-            'tno'            => $payment->transaction_id,
-            'app_no'         => $rawResponse['app_no'] ?? $meta['app_no'] ?? null,
+            'tno' => $payment->transaction_id,
+            'app_no' => $rawResponse['app_no'] ?? $meta['app_no'] ?? null,
             'use_pay_method' => $meta['use_pay_method'] ?? $rawResponse['use_pay_method'] ?? null,
-            'app_time'       => $meta['app_time'] ?? $rawResponse['app_time'] ?? null,
-            'res_cd'         => $meta['res_cd'] ?? $rawResponse['res_cd'] ?? '0000',
-            'card_name'      => $rawResponse['card_name'] ?? $meta['card_name'] ?? $rawResponse['bank_name'] ?? $meta['bank_name'] ?? null,
-            'account'        => $meta['account'] ?? null,
-            'bank_name'      => $rawResponse['bank_name'] ?? $meta['bank_name'] ?? null,
-            '_is_test_mode'  => $isTest,
+            'app_time' => $meta['app_time'] ?? $rawResponse['app_time'] ?? null,
+            'res_cd' => $meta['res_cd'] ?? $rawResponse['res_cd'] ?? '0000',
+            'card_name' => $rawResponse['card_name'] ?? $meta['card_name'] ?? $rawResponse['bank_name'] ?? $meta['bank_name'] ?? null,
+            'account' => $meta['account'] ?? null,
+            'bank_name' => $rawResponse['bank_name'] ?? $meta['bank_name'] ?? null,
+            '_is_test_mode' => $isTest,
             'payment_status' => $paymentStatus?->value ?? $payment->payment_status,
             'payment_status_label' => $paymentStatus?->label(),
             'payment_status_variant' => $paymentStatus?->variant(),
@@ -123,7 +128,7 @@ class AdminTransactionController extends AdminBaseController
 
     private function latestRefundForOrder(int $orderId): ?object
     {
-        return DB::table('ecommerce_order_refunds')
+        return DB::table((new OrderRefund)->getTable())
             ->where('order_id', $orderId)
             ->orderByDesc('id')
             ->select([
