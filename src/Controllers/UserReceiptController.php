@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
 
+// audit:allow api-doc-coverage 요청 파라미터·응답 구조 무변경 — 테이블명 리터럴을 모델 파생으로 정리한 내부 리팩토링 (#571)
+
 use App\Services\PluginSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Modules\Sirsoft\Ecommerce\Models\Order;
+use Modules\Sirsoft\Ecommerce\Models\OrderPayment;
 use Modules\Sirsoft\Ecommerce\Services\GuestOrderAuthService;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\IssuesReceiptCookie;
 use Plugins\Sirsoft\PayNhnkcp\Concerns\ResolvesEasyPayDisplay;
@@ -52,8 +56,8 @@ class UserReceiptController
     public function show(Request $request, string $orderNumber): JsonResponse
     {
         $user = $request->user();
-        $query = DB::table('ecommerce_order_payments as p')
-            ->join('ecommerce_orders as o', 'o.id', '=', 'p.order_id')
+        $query = DB::table((new OrderPayment)->getTable().' as p')
+            ->join((new Order)->getTable().' as o', 'o.id', '=', 'p.order_id')
             ->where('o.order_number', $orderNumber)
             ->where('p.pg_provider', 'nhnkcp')
             ->whereNotNull('p.transaction_id');
@@ -68,7 +72,7 @@ class UserReceiptController
             } elseif ($this->verifyReceiptCookie($request->cookie(self::RECEIPT_COOKIE_NAME), $orderNumber)) {
                 $query->whereNull('o.user_id')
                     ->where('o.id', function ($sub) use ($orderNumber) {
-                        $sub->select('id')->from('ecommerce_orders')->where('order_number', $orderNumber);
+                        $sub->select('id')->from((new Order)->getTable())->where('order_number', $orderNumber);
                     });
             } else {
                 return response()->json(['error' => 'Not found'], 404);
@@ -111,10 +115,10 @@ class UserReceiptController
 
         // 휴대폰결제 → mcash_bill, 그 외 (card / bank / vbank) → card_bill
         $billCmd = $isPhonePayment ? 'mcash_bill' : 'card_bill';
-        $receiptUrl = $billBaseUrl . $billCmd
-            . '&tno=' . urlencode($tno)
-            . '&order_no=' . urlencode($orderNo)
-            . '&trade_mony=' . $tradeMony;
+        $receiptUrl = $billBaseUrl.$billCmd
+            .'&tno='.urlencode($tno)
+            .'&order_no='.urlencode($orderNo)
+            .'&trade_mony='.$tradeMony;
 
         // 현금영수증 URL (계좌이체 · 가상계좌만 해당)
         $cashReceiptUrl = null;
@@ -124,16 +128,16 @@ class UserReceiptController
             $authNo = $pgRaw['app_no'] ?? $pgRaw['receipt_no'] ?? $tno;
             $siteCd = $this->apiService->getSiteCd();
 
-            $cashReceiptUrl = $cashBaseUrl . $siteCd
-                . '&orderid=' . urlencode($orderNo)
-                . '&bill_yn=Y'
-                . '&authno=' . urlencode((string) $authNo);
+            $cashReceiptUrl = $cashBaseUrl.$siteCd
+                .'&orderid='.urlencode($orderNo)
+                .'&bill_yn=Y'
+                .'&authno='.urlencode((string) $authNo);
         }
 
         return response()->json([
-            'receipt_url'      => $receiptUrl,
+            'receipt_url' => $receiptUrl,
             'cash_receipt_url' => $cashReceiptUrl,
-            'is_test_mode'     => $isTest,
+            'is_test_mode' => $isTest,
             'payment_method_label' => $display['payment_method_label'],
             'payment_method_display_label' => $display['payment_method_display_label'],
             'selected_payment_method' => $display['selected_payment_method'],
