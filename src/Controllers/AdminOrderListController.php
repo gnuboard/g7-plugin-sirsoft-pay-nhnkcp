@@ -6,8 +6,6 @@ declare(strict_types=1);
 
 namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
 
-// audit:allow api-doc-coverage 요청 파라미터·응답 구조 무변경 — 테이블명 리터럴을 모델 파생으로 정리한 내부 리팩토링 (#571)
-
 use App\Helpers\ResponseHelper;
 use App\Http\Controllers\Api\Base\AdminBaseController;
 use App\Services\PluginSettingsService;

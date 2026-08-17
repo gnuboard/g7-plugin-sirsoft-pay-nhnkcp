@@ -6,8 +6,6 @@ declare(strict_types=1);
 
 namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
 
-// audit:allow api-doc-coverage 요청 파라미터·응답 구조 무변경 — 테이블명 리터럴을 모델 파생으로 정리한 내부 리팩토링 (#571)
-
 use App\Helpers\ResponseHelper;
 use App\Http\Controllers\Api\Base\AdminBaseController;
 use Illuminate\Http\JsonResponse;
@@ -38,7 +36,6 @@ class AdminEscrowDeliveryController extends AdminBaseController
         'deli_corp',
     ];
 
-    /** KCP 에스크로 택배사 코드표 */
     /** 택배사 코드 → 택배사명 매핑 (KCP 공식 코드표 — EscrowDeliveryRegisterRequest 의 허용값 SSoT) */
     public const COURIER_CODES = [
         '04' => 'CJ대한통운',
