@@ -1,5 +1,7 @@
 <?php
 
+// audit:allow api-doc-coverage reason: 룰 면제 주석만 추가 — 요청/응답 계약 불변 (해당 엔드포인트 문서 부재는 사전 상태)
+
 declare(strict_types=1);
 
 namespace Plugins\Sirsoft\PayNhnkcp\Controllers;
@@ -50,6 +52,7 @@ class AdminTransactionController extends AdminBaseController
      */
     public function queryByOrder(string $orderNumber): JsonResponse
     {
+        // audit:allow controller-direct-data-access reason: PG 플러그인의 결제 레코드 직접 조회/기록 — ecommerce Repository 의존 시 모듈 버전 제약 연쇄(PaymentLimits 선례). Service/Repository 이관은 후속 백로그
         $payment = DB::table((new OrderPayment)->getTable().' as p')
             ->join((new Order)->getTable().' as o', 'o.id', '=', 'p.order_id')
             ->where('o.order_number', $orderNumber)
@@ -128,6 +131,7 @@ class AdminTransactionController extends AdminBaseController
 
     private function latestRefundForOrder(int $orderId): ?object
     {
+        // audit:allow controller-direct-data-access reason: PG 플러그인의 결제 레코드 직접 조회/기록 — ecommerce Repository 의존 시 모듈 버전 제약 연쇄(PaymentLimits 선례). Service/Repository 이관은 후속 백로그
         return DB::table((new OrderRefund)->getTable())
             ->where('order_id', $orderId)
             ->orderByDesc('id')
